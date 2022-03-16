@@ -2,11 +2,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import copy
 import astropy.units as u
-
+import pandas as pd
+import os
 
 
 class Flares:
-    def __init__(self, template, cadence, tpeak, fwhm, ampl, downsample, GA, time_range, bench_frac, random_bench):
+    def __init__(self, template, cadence, tpeak, fwhm, ampl, downsample, GA, time_range, bench_frac, random_bench, save_movie_dir):
         self.template = template
         self.cadence = cadence
         self.tpeak = tpeak
@@ -17,6 +18,7 @@ class Flares:
         self.time_range = time_range
         self.bench_frac = bench_frac
         self.random_bench = random_bench
+        self.save_movie_dir = save_movie_dir
 
     def get_fwhm(self, x_in, y_in):
 
@@ -323,7 +325,7 @@ class Flares:
                 else:
                     where_start = int(self.bench_frac * cadence_bench)
                     print(' ')
-                    print('starting at point ' + str(where_start))
+                    print('starting at point ' + str(where_start) + ' / ' + str(int(cadence_bench)))
             else:
                 where_start = 0
             self.where_start = where_start
@@ -344,8 +346,8 @@ class Flares:
         self.y_flare_noscatter = y_flare_noscatter[(x_flare >= self.time_range[0]) & (x_flare <= self.time_range[1])]
 
 
-        if self.template == 'Jackman':
-            crossing = self.tpeak - self.x_flare
+        if self.template == 'Davenport':
+            crossing = np.sign(self.tpeak - self.x_flare)
             zero_crossing = (crossing[0:-2] != crossing[1:-1])
             where_zero_crossing = np.where(zero_crossing)[0]
             prior_crossing = self.x_flare[where_zero_crossing[0]]
@@ -353,7 +355,7 @@ class Flares:
             self.tpeak_frac = (self.tpeak - prior_crossing)/(post_crossing - prior_crossing)
 
         if self.template == 'Jackman':
-            crossing = self.tpeak_conv - self.x_flare
+            crossing = np.sign(self.tpeak_conv - self.x_flare)
             zero_crossing = (crossing[0:-2] != crossing[1:-1])
             where_zero_crossing = np.where(zero_crossing)[0]
             prior_crossing = self.x_flare[where_zero_crossing[0]]
@@ -423,6 +425,8 @@ class Flares:
         self.eqdur_scatter_candidate = eqdur_scatter_candidate * (24 * 60 * 60) # + where_under_scatter_candidate # convert days to seconds
 
     def quick_test_plot(self, any_x, any_y, label_x, label_y, plot_type_y, plot_alpha_y, y_axis_label, x_axis_range, y_axis_range, plot_title, save_as):
+
+        plt.close()
         font_size = 'large'
 
         # mycolormap = choose_cmap()
@@ -498,7 +502,7 @@ class Flares:
         fwhm_diffs = diffs[1]
         ampl_diffs = diffs[2]
         ED_diffs = diffs[3]
-        Fitnesses = diffs[4]
+        fitnesses_to_plot = diffs[4]
 
         tpeak_stddevs = stddevs[0]
         fwhm_stddevs = stddevs[1]
@@ -510,28 +514,29 @@ class Flares:
                       'Diff From True FWHM (%)': fwhm_diffs,
                       'Diff From True Peak Flux (%)': ampl_diffs,
                       'Diff From True ED (%)': ED_diffs,
-                      'Fitness': Fitnesses,
+                      'Fitness': fitnesses_to_plot,
                       }
         std_diffs = {r'(t$_{peak,i}$ - t$_{peak,true}$) / Cadence': (tpeak_stddevs * u.d).to(u.min).value,
                      'Diff From True FWHM (%)': fwhm_stddevs,
                      'Diff From True Peak Flux (%)': ampl_stddevs,
                      'Diff From True ED (%)': ED_stddevs,
-                     'Fitness': Fitnesses,
+                     'Fitness': stand_in_fitness_stddevs,
                      }
 
         vpad_base = 0.05
-        vpad = vpad_base/5.
+        vpad = vpad_base/(2.*len(gene_diffs))
         hpad = 0.16
 
         ax_height = 0.18
 
-        subplot_locations = {'left': np.array([0, 0, 0, 0]) + hpad,
-                             'bottom': np.array([3*(ax_height + vpad/2) + vpad_base,
+        subplot_locations = {'left': np.array([0, 0, 0, 0, 0]) + hpad,
+                             'bottom': np.array([4*(ax_height + vpad/2) + vpad_base,
+                                                 3*(ax_height + vpad/2) + vpad_base,
                                                  2*(ax_height + vpad/2) + vpad_base,
                                                  1*(ax_height + vpad/2) + vpad_base,
                                                  vpad_base]),
-                             'width': np.array([0.97, 0.97, 0.97, 0.97]) - hpad,
-                             'height': np.array([ax_height, ax_height, ax_height, ax_height]) - vpad,
+                             'width': np.array([0.97, 0.97, 0.97, 0.97, 0.97]) - hpad,
+                             'height': np.array([ax_height, ax_height, ax_height, ax_height, ax_height]) - vpad,
                              }
 
         # subplot_locations = {'left': np.array([0, 0, 0, 0]) + hpad,
@@ -550,7 +555,6 @@ class Flares:
             ax.set_ylabel(parameter, fontsize=font_size)
             if parameter_i == len(gene_diffs) - 1:
                 ax.set_xlabel('Generation Number', fontsize=font_size)
-                ax.ticklabel_format(axis='y', style='sci')
             if parameter_i != len(gene_diffs) - 1:
                 ax.set_xticklabels([])
 
@@ -560,22 +564,33 @@ class Flares:
 
             if parameter != 'Fitness':
                 ax.plot([min(xplot), max(xplot)], [0, 0], color='#000000', alpha=0.2, lw=1.5)
-            # import pdb; pdb.set_trace()
-            ax.fill_between(x=xplot, y1=yplot + stddevplot, y2=yplot - stddevplot, color=colors[parameter_i], alpha=0.2)
-            ax.plot(xplot, yplot, color=colors[parameter_i], lw=2)
+                ax.fill_between(x=xplot, y1=yplot + stddevplot, y2=yplot - stddevplot, color=colors[parameter_i], alpha=0.2)
+                ax.plot(xplot, yplot, color=colors[parameter_i], lw=2)
+            if parameter == 'Fitness':
+                # import pdb; pdb.set_trace()
+                magnitude_order = int(np.floor(np.log10(max(abs(yplot)))))
+                yplot /= 10**magnitude_order
+                stddevplot /= 10**magnitude_order
+                ax.set_ylabel(parameter + r' ($\times$1e' + str(magnitude_order) + ')', fontsize=font_size)
+
+                ax.plot([min(xplot), max(xplot)], [0, 0], color='#000000', alpha=0.2, lw=1.5)
+                ax.fill_between(x=xplot, y1=yplot + stddevplot, y2=yplot - stddevplot, color=colors[parameter_i], alpha=0.2)
+                ax.plot(xplot, yplot, color=colors[parameter_i], lw=2)
 
             ax.set_xlim([min(xplot), max(xplot)])
-            if (parameter_i == 0) or (parameter_i == len(gene_diffs) - 1):
-                maxshift = max([max(abs(yplot + 0.35*stddevplot)), max(abs(yplot - 0.35*stddevplot))])
+            if (parameter_i == 0) or (parameter_i == len(gene_diffs) - 2):
+                # maxshift = max([max(abs(yplot + 0.35*stddevplot)), max(abs(yplot - 0.35*stddevplot))])
+                ymax = 0.20*(max(yplot + stddevplot) + 0.05 * (max(yplot + stddevplot) - min(yplot - stddevplot)))  # 1.02 * maxshift
+                ymin = 0.20*(min(yplot - stddevplot) - 0.05 * (max(yplot + stddevplot) - min(yplot - stddevplot)))
             else:
-                maxshift = max([max(abs(yplot + stddevplot)), max(abs(yplot - stddevplot))])
+                # maxshift = max([max(abs(yplot + stddevplot)), max(abs(yplot - stddevplot))])
+                ymax = max(yplot + stddevplot) + 0.05 * (max(yplot + stddevplot) - min(yplot - stddevplot))  # 1.02 * maxshift
+                ymin = min(yplot - stddevplot) - 0.05 * (max(yplot + stddevplot) - min(yplot - stddevplot))
 
-            ymax = 1.02 * maxshift
-            ymin = -1.02 * maxshift
             if max(yplot + stddevplot) < 0:
-                ymax = 0 + 0.075 * maxshift
+                ymax = 0 + 0.010 * (max(yplot + stddevplot) - min(yplot - stddevplot)) # maxshift
             if min(yplot - stddevplot) > 0:
-                ymin = 0 - 0.075 * maxshift
+                ymin = 0 - 0.010 * (max(yplot + stddevplot) - min(yplot - stddevplot)) # maxshift
             if parameter == 'Fitness':
                 ymax = max(yplot) + 0.05*(max(yplot) - min(yplot))
                 ymin = min(yplot) - 0.05*(max(yplot) - min(yplot))
@@ -779,8 +794,8 @@ class Flares:
                     old_ampl_guess = np.copy(ampl_guess)
                     random_draw = np.random.choice(ampl_draw_pool)  # See if it mutates
                     if random_draw == True:  # Does it mutate
-                        if np.random.choice([True, False, False]) == True:  # Is it a big mutation
-                            ampl_guess = np.abs(np.random.normal(2*old_ampl_guess, 0.50*old_ampl_guess, 1)[0])
+                        if np.random.choice([True, False, False, False]) == True:  # Is it a shifted big mutation
+                            ampl_guess = np.abs(np.random.uniform(0.50*old_ampl_guess, 2*old_ampl_guess, 1)[0])
                         elif np.random.choice([True, False, False]) == True:
                             ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.05*old_ampl_guess, 1)[0])
                         elif np.random.choice([True, True, False]) == True:  # Is it a big mutation
@@ -807,7 +822,7 @@ class Flares:
             if draw_new_member == True:
                 tpeak_guess = np.abs(self.x_flare[np.where(self.y_flare_scatter == np.max(self.y_flare_scatter))[0][0]] + np.random.uniform(-0.5, 0.5, 1)[0] * self.cadence * (1. / 24.) * (1. / 60.))
                 fwhm_guess = np.abs(np.random.uniform(0.15 * fwhm_guess_calc, 1.0 * fwhm_guess_calc, 1)[0]) * 24. * 60.  # (1. / 24.) * (1. / 60.)
-                ampl_guess = np.abs(np.random.uniform(0.95 * max(self.y_flare_scatter), 2.0 * max(self.y_flare_scatter), 1)[0])
+                ampl_guess = np.abs(np.random.uniform(0.50 * max(self.y_flare_scatter), 2.0 * max(self.y_flare_scatter), 1)[0])
 
                 self.generate_candidate(tpeak_guess, fwhm_guess, ampl_guess)
                 population_candidate = self.y_flare_noscatter_candidate
@@ -825,8 +840,6 @@ class Flares:
                         population_ages2.append(0)
                         population_EDs2.append(self.eqdur_noscatter_candidate)
 
-
-            print(len(population_fitnesses2))
 
             sort_inds = np.array(population_fitnesses2).argsort()
             population_genes3 = np.array(population_genes2)[sort_inds[::-1]]
@@ -857,6 +870,8 @@ class Flares:
                 population_pool2_young = list(np.array(population_pool2)[where_young])
                 population_fitnesses2_young = list(np.array(population_fitnesses2)[where_young])
                 population_EDs2_young = list(np.array(population_EDs2)[where_young])
+
+
 
                 while len(population_ages2_young) < n_pop:
 
@@ -927,8 +942,8 @@ class Flares:
                         old_ampl_guess = np.copy(ampl_guess)
                         random_draw = np.random.choice(ampl_draw_pool)
                         if random_draw == True:  # Does it mutate
-                            if np.random.choice([True, False, False]) == True:  # Is it a big mutation
-                                ampl_guess = np.abs(np.random.normal(2*old_ampl_guess, 0.50*old_ampl_guess, 1)[0])
+                            if np.random.choice([True, False, False, False]) == True:  # Is it a big mutation
+                                ampl_guess = np.abs(np.random.uniform(0.50 * old_ampl_guess, 2 * old_ampl_guess, 1)[0])
                             elif np.random.choice([True, False, False]) == True:
                                 ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.05*old_ampl_guess, 1)[0])
                             elif np.random.choice([True, True, False]) == True:  # Is it a big mutation
@@ -964,7 +979,7 @@ class Flares:
                 if draw_new_member == True:
                     tpeak_guess = np.abs(self.x_flare[np.where(self.y_flare_scatter == np.max(self.y_flare_scatter))[0][0]] + np.random.uniform(-0.5, 0.5, 1)[0] * self.cadence * (1. / 24.) * (1. / 60.))
                     fwhm_guess = np.abs(np.random.uniform(0.15 * fwhm_guess_calc, 1.0 * fwhm_guess_calc, 1)[0]) * 24. * 60.  # (1. / 24.) * (1. / 60.)
-                    ampl_guess = np.abs(np.random.uniform(0.95 * max(self.y_flare_scatter), 2.0 * max(self.y_flare_scatter), 1)[0])
+                    ampl_guess = np.abs(np.random.uniform(0.5 * max(self.y_flare_scatter), 2.0 * max(self.y_flare_scatter), 1)[0])
 
                     self.generate_candidate(tpeak_guess, fwhm_guess, ampl_guess)
                     population_candidate = self.y_flare_noscatter_candidate
@@ -1000,6 +1015,10 @@ class Flares:
                 population_fitnesses2 = copy.deepcopy(population_fitnesses4)
                 population_ages2 = copy.deepcopy(population_ages4)
                 population_EDs2 = copy.deepcopy(population_EDs4)
+
+
+            print('pop length: ' + str(len(population_fitnesses2)))
+            print(' ')
 
 
             # -------------- track gene progression ----------------#
@@ -1042,6 +1061,9 @@ class Flares:
             plot_fwhm = population_genes2_temp[1][0]
             plot_ampl = population_genes2_temp[2][0]
 
+            save_test_individual = self.save_movie_dir + str(iter_i + 1) + '_Flare_Fit_' + self.template + '_' + str(self.cadence) + '.pdf'
+            save_as_tracker = self.save_movie_dir + 'gene_progression_' + self.template + '_' + str(self.cadence) + '.pdf'
+
             save_movie_plots = True
             if save_movie_plots == True:
 
@@ -1062,65 +1084,65 @@ class Flares:
                     label_y = ['Truth', 'Simulated Observations', 'Best Fit']
                     pl_title = 'FWHM: ' + str(np.round(plot_fwhm,2)) + ' min   Amplitude: ' + str(np.round(plot_ampl,2))
 
-                    save_test_individual = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/Chapter3_Movie/' + \
-                                           str(iter_i+1) + '_Flare_Fit_' + self.template + '_' + str(self.cadence) + '.pdf'
+                    # save_test_individual = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/Chapter3_Movie/' + \
+                    #                        str(iter_i+1) + '_Flare_Fit_' + self.template + '_' + str(self.cadence) + '.pdf'
                     self.quick_test_plot(any_x=plot_x, any_y=plot_y, label_x='Time (d)', label_y=label_y,
                                          plot_type_y=plot_types_y,
                                          plot_alpha_y=plot_alphas_y, y_axis_label='Flare Flux', x_axis_range=x_range,
                                          y_axis_range=thres_y, plot_title=pl_title,save_as=save_test_individual)
 
-            if (iter_i > 0) and ((fitness_tracker[-2] < fitness_tracker[-1]) or (np.mod(iter_i + 1, save_every) == 0)):
+                if (iter_i > 0) and ((fitness_tracker[-2] < fitness_tracker[-1]) or (np.mod(iter_i + 1, save_every) == 0)):
 
-                self.generate_candidate(plot_tpeak, plot_fwhm, plot_ampl)
+                    self.generate_candidate(plot_tpeak, plot_fwhm, plot_ampl)
 
-                plot_x = [self.x_synth, self.x_flare, self.x_synth_candidate]
-                plot_y = [self.y_synth_noscatter, [self.y_flare_scatter, self.y_flare_err],
-                          self.y_synth_noscatter_candidate]
-                plot_types_y = ['line', 'scatter', 'line']
-                plot_alphas_y = [1.0, 1.0, 1.0]
+                    plot_x = [self.x_synth, self.x_flare, self.x_synth_candidate]
+                    plot_y = [self.y_synth_noscatter, [self.y_flare_scatter, self.y_flare_err],
+                              self.y_synth_noscatter_candidate]
+                    plot_types_y = ['line', 'scatter', 'line']
+                    plot_alphas_y = [1.0, 1.0, 1.0]
 
-                thres_y = [0, 1.05]
-                x_range = self.time_range
+                    thres_y = [0, 1.05]
+                    x_range = self.time_range
 
-                label_y = ['Truth', 'Simulated Observations', 'Best Fit']
-                pl_title = 'FWHM: ' + str(np.round(plot_fwhm, 2)) + ' min   Amplitude: ' + str(np.round(plot_ampl, 2))
+                    label_y = ['Truth', 'Simulated Observations', 'Best Fit']
+                    pl_title = 'FWHM: ' + str(np.round(plot_fwhm, 2)) + ' min   Amplitude: ' + str(np.round(plot_ampl, 2))
 
-                save_test_individual = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/Chapter3_Movie/' + \
-                                       str(iter_i + 1) + '_Flare_Fit_' + self.template + '_' + str(self.cadence) + '.pdf'
-                self.quick_test_plot(any_x=plot_x, any_y=plot_y, label_x='Time (d)', label_y=label_y,
-                                     plot_type_y=plot_types_y,
-                                     plot_alpha_y=plot_alphas_y, y_axis_label='Flare Flux', x_axis_range=x_range,
-                                     y_axis_range=thres_y, plot_title=pl_title, save_as=save_test_individual)
+                    # save_test_individual = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/Chapter3_Movie/' + \
+                    #                        str(iter_i + 1) + '_Flare_Fit_' + self.template + '_' + str(self.cadence) + '.pdf'
+                    self.quick_test_plot(any_x=plot_x, any_y=plot_y, label_x='Time (d)', label_y=label_y,
+                                         plot_type_y=plot_types_y,
+                                         plot_alpha_y=plot_alphas_y, y_axis_label='Flare Flux', x_axis_range=x_range,
+                                         y_axis_range=thres_y, plot_title=pl_title, save_as=save_test_individual)
 
 
-                save_as_tracker = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/Chapter3_Movie/gene_progression_' + self.template + '_' + str(self.cadence) + '.pdf'
-                self.plot_gene_progression(percent_diff_gene_tracker, std_tracker, save_as=save_as_tracker)
+                    # save_as_tracker = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/Chapter3_Movie/gene_progression_' + self.template + '_' + str(self.cadence) + '.pdf'
+                    self.plot_gene_progression(percent_diff_gene_tracker, std_tracker, save_as=save_as_tracker)
 
             if iter_i == n_iter - 1:
 
-                self.generate_candidate(plot_tpeak, plot_fwhm, plot_ampl)
+                    self.generate_candidate(plot_tpeak, plot_fwhm, plot_ampl)
 
-                plot_x = [self.x_synth, self.x_flare, self.x_synth_candidate]
-                plot_y = [self.y_synth_noscatter, [self.y_flare_scatter, self.y_flare_err], self.y_synth_noscatter_candidate]
-                plot_types_y = ['line', 'scatter', 'line']
-                plot_alphas_y = [1.0, 1.0, 1.0]
+                    plot_x = [self.x_synth, self.x_flare, self.x_synth_candidate]
+                    plot_y = [self.y_synth_noscatter, [self.y_flare_scatter, self.y_flare_err], self.y_synth_noscatter_candidate]
+                    plot_types_y = ['line', 'scatter', 'line']
+                    plot_alphas_y = [1.0, 1.0, 1.0]
 
-                # thres_y = [0, 1.1 * np.max([np.max(self.y_synth_noscatter), np.max(self.y_flare_scatter), np.max(self.y_synth_noscatter_candidate)])]
-                thres_y = [0, 1.05]
-                x_range = self.time_range
+                    # thres_y = [0, 1.1 * np.max([np.max(self.y_synth_noscatter), np.max(self.y_flare_scatter), np.max(self.y_synth_noscatter_candidate)])]
+                    thres_y = [0, 1.05]
+                    x_range = self.time_range
 
-                label_y = ['Truth', 'Simulated Observations', 'Best Fit']
-                pl_title = 'FWHM: ' + str(np.round(plot_fwhm, 2)) + ' min   Amplitude: ' + str(np.round(plot_ampl, 2))
+                    label_y = ['Truth', 'Simulated Observations', 'Best Fit']
+                    pl_title = 'FWHM: ' + str(np.round(plot_fwhm, 2)) + ' min   Amplitude: ' + str(np.round(plot_ampl, 2))
 
-                save_test_individual = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/Flare_Fit_' + \
-                                       self.template + '_' + str(self.cadence) + '.pdf'
-                self.quick_test_plot(any_x=plot_x, any_y=plot_y, label_x='Time (d)', label_y=label_y,
-                                     plot_type_y=plot_types_y,
-                                     plot_alpha_y=plot_alphas_y, y_axis_label='Flare Flux', x_axis_range=x_range,
-                                     y_axis_range=thres_y, plot_title=pl_title,save_as=save_test_individual)
+                    # save_test_individual = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/Flare_Fit_' + \
+                    #                        self.template + '_' + str(self.cadence) + '.pdf'
+                    self.quick_test_plot(any_x=plot_x, any_y=plot_y, label_x='Time (d)', label_y=label_y,
+                                         plot_type_y=plot_types_y,
+                                         plot_alpha_y=plot_alphas_y, y_axis_label='Flare Flux', x_axis_range=x_range,
+                                         y_axis_range=thres_y, plot_title=pl_title,save_as=save_test_individual)
 
-                save_as_tracker = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/Chapter3_Movie/gene_progression_' + self.template + '_' + str(self.cadence) + '.pdf'
-                self.plot_gene_progression(percent_diff_gene_tracker, std_tracker, save_as=save_as_tracker)
+                    # save_as_tracker = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/Chapter3_Movie/gene_progression_' + self.template + '_' + str(self.cadence) + '.pdf'
+                    self.plot_gene_progression(percent_diff_gene_tracker, std_tracker, save_as=save_as_tracker)
 
         self.fit_tpeak = population_genes2[0][0]
         self.fit_fwhm = population_genes2[0][1]
@@ -1137,13 +1159,37 @@ class Flares:
         self.do_GA()
 
 
+
+def set_directory(save_dir, fl_template, lc_cadence):
+    does_dir_exist = False
+    dir_nums = []
+    for sub_dir in os.listdir(save_dir):
+        dir = os.path.join(save_dir, sub_dir)
+        if os.path.isdir(dir):
+            if fl_template + '_' + str(lc_cadence) in dir:
+                dir_num = int(dir[-1])
+                dir_nums.append(dir_num)
+                does_dir_exist = True
+
+    if does_dir_exist == False:
+        new_dir = save_dir + fl_template + '_' + str(lc_cadence) + '_' + str(0)
+        os.mkdir(new_dir)
+
+    if does_dir_exist == True:
+        new_dir = save_dir + fl_template + '_' + str(lc_cadence) + '_' + str(int(dir_nums[-1] + 1))
+        os.mkdir(new_dir)
+
+    new_dir += '/'
+
+    return new_dir
+
 stddev = 0.001 * (1. / 50)
 
 
 do_GA_fit = True
 if do_GA_fit == True:
 
-    lightcurve_cadence = 30.0  # minutes
+    lightcurve_cadence = 25.0  # minutes
     start_at_cadence_fraction = 0.0
 
     t_range = [0.475, 0.60]
@@ -1154,31 +1200,76 @@ if do_GA_fit == True:
 
     flare_template = 'Jackman'
 
+    save_directory = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/'
+    save_movie_directory = set_directory(save_dir=save_directory, fl_template=flare_template, lc_cadence=lightcurve_cadence)
+
+
+    # import pdb; pdb.set_trace()
+
     F = Flares(template=flare_template, cadence=lightcurve_cadence, tpeak=set_tpeak, fwhm=set_fwhm, ampl=set_ampl,
-               downsample=True, GA=True, time_range=t_range, bench_frac=start_at_cadence_fraction, random_bench=False)
+               downsample=True, GA=True, time_range=t_range, bench_frac=start_at_cadence_fraction, random_bench=False,
+               save_movie_dir=save_movie_directory)
     F.generate_flare()
     F.fit_flare()
 
     print(' ')
-    print(flare_template)
+    print('Template: ' + flare_template)
     print('------------------')
-    print('S/N at peak: ' + F.sig_to_noise)
+    print('S/N at peak: ' + str(F.sig_to_noise))
+    print('tpeak frac: ' + str(F.tpeak_frac))
     if flare_template == 'Jackman':
-        print('tpeak truth: ' + F.tpeak_conv)
-        print('FWHM truth: ' + F.fwhm_conv)
-        print('ampl truth: ' + F.ampl_conv)
+        tpeak_truth = F.tpeak_conv
+        FWHM_truth = F.fwhm_conv
+        ampl_truth = F.ampl_conv
+        print('tpeak truth: ' + str(F.tpeak_conv))
+        print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
+        print('FWHM truth: ' + str(F.fwhm_conv))
+        print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
+        print('ampl truth: ' + str(F.ampl_conv))
+        print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
     if flare_template == 'Davenport':
-        print('tpeak truth: ' + F.tpeak)
-        print('FWHM truth: ' + F.fwhm)
-        print('ampl truth: ' + F.ampl)
-    print('ED truth: ' + F.eqdur_noscatter)
+        tpeak_truth = F.tpeak
+        FWHM_truth = F.fwhm
+        ampl_truth = F.ampl
+        print('tpeak truth: ' + str(F.tpeak))
+        print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
+        print('FWHM truth: ' + str(F.fwhm))
+        print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
+        print('ampl truth: ' + str(F.ampl))
+        print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
     print(' ')
-    print('tpeak fit: ' + F.fit_tpeak + ' +/- ' + F.fit_tpeak_err)
-    print('FWHM fit: ' + F.fit_fwhm + ' +/- ' + F.fit_fwhm_err)
-    print('ampl fit: ' + F.fit_ampl + ' +/- ' + F.fit_ampl_err)
-    print('ED fit: ' + F.fit_ED + ' +/- ' + F.fit_ED_err)
-    print('tpeak frac: ' + F.tpeak_frac)
+    print('ED truth: ' + str(F.eqdur_noscatter))
+    print('ED fit: ' + str(F.fit_ED) + ' +/- ' + str(F.fit_ED_err))
 
+    fit_data = {'Template': [flare_template],
+                'Cadence (min)': [F.cadence],
+                'tpeak frac': [F.tpeak_frac],
+                'S/N at peak': [F.sig_to_noise],
+                'tpeak truth': [tpeak_truth],
+                'tpeak fit': [F.fit_tpeak],
+                'tpeak fit err': [F.fit_tpeak_err],
+                'FWHM truth': [FWHM_truth],
+                'FWHM fit': [F.fit_fwhm],
+                'FWHM fit err': [F.fit_fwhm_err],
+                'ampl truth': [ampl_truth],
+                'ampl fit': [F.fit_ampl],
+                'ampl fit err':[F.fit_ampl_err],
+                'ED truth': [F.eqdur_noscatter],
+                'ED fit': [F.fit_ED],
+                'ED fit err': [F.fit_ED_err],
+                }
+
+    file_name = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Files/Flare_Fit_Data.csv'
+    old_fit_data = pd.read_csv(file_name)
+
+    cols = old_fit_data.columns
+    for col_i, col in enumerate(cols):
+        current_col = old_fit_data[col].values
+        for val_i, val in enumerate(current_col):
+            fit_data[col].append(val)
+
+    df_fit_data = pd.DataFrame(fit_data)
+    df_fit_data.to_csv(file_name, index=False)
 
 
 do_compare_modelpars = False
