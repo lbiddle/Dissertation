@@ -16,23 +16,10 @@ class FlareFits:
 
     def plot_fit_results(self):
 
-        # plot_text = {'Template': 'Template',
-        #             'Cadence (min)': 'Cadence (min)',
-        #             'tpeak frac': 't$_{peak,true}$ Location\nAs Fraction Between Points',
-        #             'S/N at peak': 'S/N at True Peak Amplitude',
-        #             'tpeak truth': 'True t$_{peak}$',
-        #             'tpeak fit': 'Fit t$_{peak}$',
-        #             'tpeak fit err': 'Fit t$_{peak}$ Err',
-        #             'FWHM truth': 'True FWHM',
-        #             'FWHM fit': 'Fit FWHM',
-        #             'FWHM fit err': 'Fit FWHM Err',
-        #             'ampl truth': 'True Amplitude',
-        #             'ampl fit': 'Fit Amplitude',
-        #             'ampl fit err': 'Fit Amplitude Err',
-        #             'ED truth': 'True ED',
-        #             'ED fit': 'Fit ED',
-        #             'ED fit err': 'Fit ED Err',
-        #             }
+        test_t_fractions = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.0]
+        test_cadences = [30.0, 2.0, 10. / 60., 1.0, 20.0, 10.0]
+        SNR_binwidth = max(self.data['S/N at peak'].values)/15
+        SNR_bins = np.arange(0,max(self.data['S/N at peak'].values)+ SNR_binwidth,SNR_binwidth)
 
         plot_text = {'tpeak': '% Diff From True t$_{peak}$',
                      'FWHM': '% Diff From True FWHM',
@@ -40,11 +27,8 @@ class FlareFits:
                      'ED': '% Diff From True ED',
                      }
 
-        independent_variables = ['Cadence (min)'] # , 'tpeak frac', 'S/N at peak']
+        independent_variables = ['Cadence (min)', 'S/N at peak'] # , 'tpeak frac', 'S/N at peak']
         plot_subjects = ['ED', 'ampl', 'FWHM', 'tpeak']
-
-
-
 
 
         num_plots = int(len(plot_subjects) * len(independent_variables))
@@ -53,16 +37,35 @@ class FlareFits:
         num_rows = len(plot_subjects)
 
         vpad_base = 0.05
-        vpad = vpad_base / (2. * num_cols)
-        hpad = 0.18
+        vpad = vpad_base / (num_rows/2.)
+        hpad_base = 0.10
+        hpad = 0.025
 
         ax_height = 1./num_rows - vpad
-        ax_width = 0.97
+        ax_width = (0.97-(hpad_base + hpad))/num_cols
 
-        left_array = [i for i in [hpad]*num_rows]
-        bottom_array = [(i * (ax_height+vpad/2) + vpad_base) for i in range(num_rows)]
-        width_array = [i - hpad for i in [ax_width]*num_rows]
-        height_array = [i for i in [ax_height] * num_rows]
+
+        left_array = []
+        bottom_array = []
+        width_array = []
+        height_array = []
+
+        for column in range(len(independent_variables)):
+            for row in range(len(plot_subjects)):
+                left_array.append(column*(ax_width+hpad) + hpad_base)
+                bottom_array.append(np.mod(row,4)*(ax_height+vpad/2) + vpad_base)
+                width_array.append(ax_width)
+                height_array.append(ax_height)
+
+        # import pdb; pdb.set_trace()
+
+
+        # left_array = [i for i in [hpad]*num_rows]
+        # bottom_array = [(i * (ax_height+vpad/2) + vpad_base) for i in range(num_rows)]
+        # width_array = [i - hpad for i in [ax_width]*num_rows]
+        # height_array = [i for i in [ax_height] * num_rows]
+
+
 
 
         plt.close()
@@ -71,48 +74,107 @@ class FlareFits:
         colors = ['#003366', '#006600', '#b3003b', '#e65c00', '#595959']
         colors = ['#e65c00','#b3003b','#006600','#003366']
         fig = plt.figure(1, figsize=(4*num_cols, 3*num_rows), facecolor="#ffffff")  # , dpi=300)
-        for parameter_i, parameter in enumerate(plot_subjects):
-            ax = fig.add_axes((left_array[parameter_i], bottom_array[parameter_i],
-                               width_array[parameter_i], height_array[parameter_i]))
+        ith_term = 0
+        for x_parameter_i, x_parameter in enumerate(independent_variables):
+            for parameter_i, parameter in enumerate(plot_subjects):
+                ax = fig.add_axes((left_array[ith_term], bottom_array[ith_term],
+                                   width_array[ith_term], height_array[ith_term]))
 
-            x_parameter = independent_variables[0]
+                if parameter == 'tpeak':
+                    fit_key = 'tpeak fit'
+                    fiterr_key = 'tpeak fit err'
+                    truth_key = 'tpeak truth'
+                    ymin = -2.0
+                    ymax = 2.0
 
-            if parameter == 'tpeak':
-                yplot = ((np.array(self.data['tpeak fit'].values) / np.array(self.data['tpeak truth'].values)) - 1.)*100
-                yploterr = np.sqrt((100./np.array(self.data['tpeak truth'].values))**2 * np.array(self.data['tpeak fit err'].values)**2)
-            if parameter == 'FWHM':
-                yplot = ((np.array(self.data['FWHM fit'].values) / np.array(self.data['FWHM truth'].values)) - 1.)*100
-                yploterr = np.sqrt((100./np.array(self.data['FWHM truth'].values))**2 * np.array(self.data['FWHM fit err'].values)**2)
-            if parameter == 'ampl':
-                yplot = ((np.array(self.data['ampl fit'].values) / np.array(self.data['ampl truth'].values)) - 1.)*100
-                yploterr = np.sqrt((100./np.array(self.data['ampl truth'].values))**2 * np.array(self.data['ampl fit err'].values)**2)
-            if parameter == 'ED':
-                yplot = ((np.array(self.data['ED fit'].values) / np.array(self.data['ED truth'].values)) - 1.)*100
-                yploterr = np.sqrt((100./np.array(self.data['ED truth'].values))**2 * np.array(self.data['ED fit err'].values)**2)
+                if parameter == 'FWHM':
+                    fit_key = 'FWHM fit'
+                    fiterr_key = 'FWHM fit err'
+                    truth_key = 'FWHM truth'
+                    ymin = -50
+                    ymax = 200
 
-            if x_parameter == 'Cadence (min)':
-                xplot = np.array(self.data[x_parameter].values)
+                if parameter == 'ampl':
+                    fit_key = 'ampl fit'
+                    fiterr_key = 'ampl fit err'
+                    truth_key = 'ampl truth'
+                    ymin = -40
+                    ymax = 80
 
-            ax.set_ylabel(plot_text[parameter], fontsize=font_size)
-            if parameter_i == 0:
-                ax.set_xlabel(x_parameter, fontsize=font_size)
-            if parameter_i != 0:
-                ax.set_xticklabels([])
+                if parameter == 'ED':
+                    fit_key = 'ED fit'
+                    fiterr_key = 'ED fit err'
+                    truth_key = 'ED truth'
+                    ymin = -20
+                    ymax = 150
 
-            ymax = max(yplot) + 0.1*(max(yplot) - min(yplot))
-            ymin = min(yplot) - 0.1*(max(yplot) - min(yplot))
-            xmax = max(xplot) + 0.1 * (max(xplot) - min(xplot))
-            xmin = min(xplot) - 0.1 * (max(xplot) - min(xplot))
+                # import pdb; pdb.set_trace()
 
-            ax.plot([xmin, xmax],[0,0], color='#000000', alpha=0.2, lw=1.5, zorder=0)
-            ax.scatter(xplot, yplot, color=colors[parameter_i], s=np.pi*(3)**2, zorder=1)
-            ax.errorbar(xplot, yplot, yerr=yploterr, fmt='None', ecolor=colors[parameter_i], elinewidth=2, capsize=2, capthick=2, zorder=1)
+                yplot = []
+                yploterr = []
+                xplot = []
+                if x_parameter == 'Cadence (min)':
+                    for cad_i, cad in enumerate(test_cadences):
+                        xpar_df = self.data[self.data[x_parameter] == cad]
+
+                        if parameter == 'tpeak':
+                            yval = (np.array(xpar_df[fit_key].values) - np.array(xpar_df[truth_key].values))/((np.array(xpar_df[x_parameter].values) * u.min).to(u.d).value)
+                            yvalerr = np.sqrt((1./(np.array(xpar_df[x_parameter].values) * u.min).to(u.d).value)**2 * np.array(xpar_df[fiterr_key].values)**2)
+
+                        else:
+                            yval = ((np.array(xpar_df[fit_key].values) / np.array(xpar_df[truth_key].values)) - 1.) * 100
+                            yvalerr = np.sqrt((100. / np.array(xpar_df[truth_key].values)) ** 2 * np.array(xpar_df[fiterr_key].values) ** 2)
+
+                        yplot.append(np.mean(yval))
+                        yploterr.append(np.mean(yvalerr))
+                        xplot.append(cad)
+
+                if x_parameter == 'S/N at peak':
+                    for SNRbin_i, SNRbin in enumerate(SNR_bins[0:-1]):
+                        xpar_df = self.data[(self.data[x_parameter] >= SNR_bins[SNRbin_i]) & (self.data[x_parameter] < SNR_bins[SNRbin_i + 1])]
+
+                        yval = ((np.array(xpar_df[fit_key].values) / np.array(xpar_df[truth_key].values)) - 1.) * 100
+                        yvalerr = np.sqrt((100. / np.array(xpar_df[truth_key].values)) ** 2 * np.array(xpar_df[fiterr_key].values) ** 2)
+
+                        yplot.append(np.mean(yval))
+                        yploterr.append(np.mean(yvalerr))
+                        xplot.append(np.mean([SNR_bins[SNRbin_i],SNR_bins[SNRbin_i+1]]))
 
 
 
-            ax.set_ylim([ymin, ymax])
-            ax.set_xlim([xmin, xmax])
-            ax.tick_params(axis='both', direction='in', labelsize=font_size, top=True, right=False)
+                if parameter_i == 0:
+                    ax.set_xlabel(x_parameter, fontsize=font_size)
+                if parameter_i != 0:
+                    ax.set_xticklabels([])
+                if x_parameter_i == 0:
+                    ax.set_ylabel(plot_text[parameter], fontsize=font_size)
+                if x_parameter_i != 0:
+                    ax.set_yticklabels([])
+
+
+                # maxplot = max(np.array(yplot) + np.array(yploterr))
+                # minplot = min(np.array(yplot) - np.array(yploterr))
+                # ymax = maxplot + 0.1*(maxplot - minplot)
+                # ymin = minplot - 0.1*(maxplot - minplot)
+                xmax = max(xplot) + 0.05 * (max(xplot) - min(xplot))
+                xmin = min(xplot) - 0.05 * (max(xplot) - min(xplot))
+                #
+                # if maxplot <= 0:
+                #     ymax = (maxplot - minplot)
+                # if minplot >= 0:
+                #     ymin = -(maxplot - minplot)
+
+                ax.plot([xmin, xmax],[0,0], color='#000000', alpha=0.2, lw=1.5, zorder=0)
+                ax.scatter(xplot, yplot, color=colors[parameter_i], s=np.pi*(3)**2, zorder=1)
+                ax.errorbar(xplot, yplot, yerr=yploterr, fmt='None', ecolor=colors[parameter_i], elinewidth=2, capsize=2, capthick=2, zorder=1)
+
+
+
+                ax.set_ylim([ymin, ymax])
+                ax.set_xlim([xmin, xmax])
+                ax.tick_params(axis='both', direction='in', labelsize=font_size, top=True, right=False)
+
+                ith_term += 1
         plt.savefig(self.save_loc, dpi=300)
         plt.close()
 
@@ -525,12 +587,14 @@ class Flares:
         self.y_flare_err_candidate = y_flare_err_candidate[(x_flare_candidate >= self.time_range[0]) & (x_flare_candidate <= self.time_range[1])]
         self.y_flare_noscatter_candidate = y_flare_noscatter_candidate[(x_flare_candidate >= self.time_range[0]) & (x_flare_candidate <= self.time_range[1])]
 
-        self.tpeak_candidate = self.x_flare_candidate[np.where(self.y_flare_scatter_candidate == max(self.y_flare_scatter_candidate))[0][0]]
-        crossing = np.sign(self.tpeak - self.x_flare)
+        # import pdb; pdb.set_trace()
+
+        self.tpeak_candidate = x_synth_candidate[np.where(y_synth_noscatter_candidate == max(y_synth_noscatter_candidate))[0][0]]
+        crossing = np.sign(self.tpeak_candidate - x_synth_candidate)
         zero_crossing = (crossing[0:-2] != crossing[1:-1])
         where_zero_crossing = np.where(zero_crossing)[0]
-        prior_crossing = self.x_flare[where_zero_crossing[0]]
-        post_crossing = self.x_flare[where_zero_crossing[0] + 1]
+        prior_crossing = x_synth_candidate[where_zero_crossing[0]]
+        post_crossing = x_synth_candidate[where_zero_crossing[0] + 2]
         self.tpeak_frac_candidate = (self.tpeak_candidate - prior_crossing)/(post_crossing - prior_crossing)
 
         eqdur_noscatter_candidate = np.trapz(self.y_flare_noscatter_candidate, x=self.x_flare_candidate)
@@ -542,7 +606,7 @@ class Flares:
     def quick_test_plot(self, any_x, any_y, label_x, label_y, plot_type_y, plot_alpha_y, y_axis_label, x_axis_range, y_axis_range, plot_title, save_as):
 
         plt.close()
-        font_size = 'large'
+        font_size = 'medium'
 
         # mycolormap = choose_cmap()
         # colors = mycolormap(range(len(any_x)))
@@ -561,7 +625,7 @@ class Flares:
 
         # import pdb; pdb.set_trace()
 
-        fig = plt.figure(1, figsize=(6, 5.5), facecolor="#ffffff")  # , dpi=300)
+        fig = plt.figure(1, figsize=(5, 5*(5.5/6.0)), facecolor='#ffffff')  # , dpi=300)
         ax = fig.add_subplot(111)
         # ax.set_title(plot_title, fontsize=font_size, style='normal', family='sans-serif')
 
@@ -610,7 +674,7 @@ class Flares:
                 ax.set_xlabel(label_x, fontsize=font_size, style='normal', family='sans-serif')
                 ax.set_ylabel(y_axis_label, fontsize=font_size, style='normal', family='sans-serif')
         ax.tick_params(axis='both', direction='in', labelsize=font_size, top=True, right=False)
-        ax.legend(loc='upper right', fontsize='large', framealpha=1.0, fancybox=False, frameon=True)
+        ax.legend(loc='upper right', fontsize=font_size, framealpha=1.0, fancybox=False, frameon=True)
         plt.tight_layout()
         plt.savefig(save_as, dpi=300)
         plt.close()
@@ -729,7 +793,7 @@ class Flares:
         n_pop = 10
         n_children = 5
         n_iter = 50
-        max_age = 10
+        avg_max_age = 10
 
         if self.template == 'Davenport':
             the_true_tpeak = self.tpeak
@@ -1005,7 +1069,12 @@ class Flares:
 
 
 
-            where_young = np.where(np.array(population_ages2) < max_age)[0]
+            # where_young = np.where(np.array(population_ages2) < max_age)[0]
+            where_young = []
+            for thing in range(len(population_ages2)):
+                max_age = int(np.random.normal(avg_max_age, 4, 1)[0])
+                if population_ages2[thing] <= max_age:
+                    where_young.append(thing)
             if len(where_young) > 0:
                 population_ages2_young = list(np.array(population_ages2)[where_young])
 
@@ -1232,7 +1301,7 @@ class Flares:
                     plot_alphas_y = [1.0, 1.0, 1.0]
 
                     # thres_y = [0, 1.1 * np.max([np.max(self.y_synth_noscatter), np.max(self.y_flare_scatter), np.max(self.y_synth_noscatter_candidate)])]
-                    thres_y = [0, 1.05*max(self.y_synth_noscatter_candidate)]
+                    thres_y = [0, 1.5]  # 1.05 * max([max(self.y_synth_noscatter_candidate), max(self.y_synth_noscatter)])]
                     x_range = self.time_range
 
                     label_y = ['Truth', 'Simulated Observations', 'Best Fit']
@@ -1255,8 +1324,7 @@ class Flares:
                     plot_types_y = ['line', 'scatter', 'line']
                     plot_alphas_y = [1.0, 1.0, 1.0]
 
-                    thres_y = [0, 1.05*max(self.y_synth_noscatter_candidate)]
-                    x_range = self.time_range
+                    thres_y = [0, 1.5]  # 1.05 * max([max(self.y_synth_noscatter_candidate), max(self.y_synth_noscatter)])]                    x_range = self.time_range
 
                     label_y = ['Truth', 'Simulated Observations', 'Best Fit']
                     pl_title = 'FWHM: ' + str(np.round(plot_fwhm, 2)) + ' min   Amplitude: ' + str(np.round(plot_ampl, 2))
@@ -1282,7 +1350,7 @@ class Flares:
                     plot_alphas_y = [1.0, 1.0, 1.0]
 
                     # thres_y = [0, 1.1 * np.max([np.max(self.y_synth_noscatter), np.max(self.y_flare_scatter), np.max(self.y_synth_noscatter_candidate)])]
-                    thres_y = [0, 1.05*max(self.y_synth_noscatter_candidate)]
+                    thres_y = [0, 1.5] # 1.05 * max([max(self.y_synth_noscatter_candidate), max(self.y_synth_noscatter)])]
                     x_range = self.time_range
 
                     label_y = ['Truth', 'Simulated Observations', 'Best Fit']
@@ -1345,104 +1413,107 @@ def set_directory(save_dir, fl_template, lc_cadence, lc_tfrac):
 stddev = 0.001 * (1. / 50)
 
 
-do_GA_fit = True
+do_GA_fit = False
 if do_GA_fit == True:
 
-    test_t_fractions = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    test_t_fractions = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.0, 0.1, 0.2]
     test_cadences = [30.0, 2.0, 10./60., 1.0, 20.0, 10.0]  # 16.0, 8.0, 4.0]
+    iterations = 100
 
-    for t_frac_i, t_frac in enumerate(test_t_fractions):
-        for lc_cad_i, lc_cad in enumerate(test_cadences):
+    for iter_i in range(iterations):
 
-            lightcurve_cadence = lc_cad  # minutes
-            start_at_cadence_fraction = t_frac
+        for t_frac_i, t_frac in enumerate(test_t_fractions):
+            for lc_cad_i, lc_cad in enumerate(test_cadences):
 
-            t_range = [0.475, 0.60]
+                lightcurve_cadence = lc_cad  # minutes
+                start_at_cadence_fraction = t_frac
 
-            set_tpeak = 0.5 # days
-            set_fwhm = 10.0 # min
-            set_ampl = 1.0
+                t_range = [0.475, 0.60]
 
-            flare_template = 'Jackman'
+                set_tpeak = 0.5 # days
+                set_fwhm = 10.0 # min
+                set_ampl = 1.0
 
-            save_directory = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/'
-            save_movie_directory = set_directory(save_dir=save_directory, fl_template=flare_template,
-                                                 lc_cadence=lightcurve_cadence, lc_tfrac=start_at_cadence_fraction)
+                flare_template = 'Jackman'
 
-
-            # import pdb; pdb.set_trace()
-
-            F = Flares(template=flare_template, cadence=lightcurve_cadence, tpeak=set_tpeak, fwhm=set_fwhm, ampl=set_ampl,
-                       downsample=True, GA=True, time_range=t_range, bench_frac=start_at_cadence_fraction, random_bench=False,
-                       save_movie_dir=save_movie_directory)
-            F.generate_flare()
-            F.fit_flare()
-
-            print(' ')
-            print('Template: ' + flare_template)
-            print('------------------')
-            print('S/N at peak: ' + str(F.sig_to_noise))
-            print('tpeak frac: ' + str(F.tpeak_frac))
-            if flare_template == 'Jackman':
-                tpeak_truth = F.tpeak_conv
-                FWHM_truth = F.fwhm_conv
-                ampl_truth = F.ampl_conv
-                print('tpeak truth: ' + str(F.tpeak_conv))
-                print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
-                print('FWHM truth: ' + str(F.fwhm_conv))
-                print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
-                print('ampl truth: ' + str(F.ampl_conv))
-                print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
-            if flare_template == 'Davenport':
-                tpeak_truth = F.tpeak
-                FWHM_truth = F.fwhm
-                ampl_truth = F.ampl
-                print('tpeak truth: ' + str(F.tpeak))
-                print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
-                print('FWHM truth: ' + str(F.fwhm))
-                print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
-                print('ampl truth: ' + str(F.ampl))
-                print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
-            print(' ')
-            print('ED truth: ' + str(F.eqdur_truth_noscatter))
-            print('ED fit: ' + str(F.fit_ED) + ' +/- ' + str(F.fit_ED_err))
-            print('ED obs: ' + str(F.eqdur_obs_noscatter))
-
-            fit_data = {'Template': [flare_template],
-                        'Cadence (min)': [F.cadence],
-                        'tpeak frac': [F.tpeak_frac],
-                        'tpeak frac fit': [F.fit_tpeak_frac],
-                        'tpeak frac fit err': [F.fit_tpeak_frac_err],
-                        'S/N at peak': [F.sig_to_noise[0]],
-                        'tpeak truth': [tpeak_truth],
-                        'tpeak fit': [F.fit_tpeak],
-                        'tpeak fit err': [F.fit_tpeak_err],
-                        'FWHM truth': [FWHM_truth],
-                        'FWHM fit': [F.fit_fwhm],
-                        'FWHM fit err': [F.fit_fwhm_err],
-                        'ampl truth': [ampl_truth],
-                        'ampl fit': [F.fit_ampl],
-                        'ampl fit err':[F.fit_ampl_err],
-                        'ED truth': [F.eqdur_truth_noscatter],
-                        'ED fit': [F.fit_ED],
-                        'ED fit err': [F.fit_ED_err],
-                        'ED obs': [F.eqdur_obs_scatter],
-                        }
-
-            file_name = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Files/Flare_Fit_Data.csv'
-            old_fit_data = pd.read_csv(file_name)
-
-            cols = old_fit_data.columns
-            for col_i, col in enumerate(cols):
-                current_col = old_fit_data[col].values
-                for val_i, val in enumerate(current_col):
-                    fit_data[col].append(val)
-
-            df_fit_data = pd.DataFrame(fit_data)
-            df_fit_data.to_csv(file_name, index=False)
+                save_directory = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/'
+                save_movie_directory = set_directory(save_dir=save_directory, fl_template=flare_template,
+                                                     lc_cadence=lightcurve_cadence, lc_tfrac=start_at_cadence_fraction)
 
 
-do_plot_flare_fits = False
+                # import pdb; pdb.set_trace()
+
+                F = Flares(template=flare_template, cadence=lightcurve_cadence, tpeak=set_tpeak, fwhm=set_fwhm, ampl=set_ampl,
+                           downsample=True, GA=True, time_range=t_range, bench_frac=start_at_cadence_fraction, random_bench=False,
+                           save_movie_dir=save_movie_directory)
+                F.generate_flare()
+                F.fit_flare()
+
+                print(' ')
+                print('Template: ' + flare_template)
+                print('------------------')
+                print('S/N at peak: ' + str(F.sig_to_noise))
+                print('tpeak frac: ' + str(F.tpeak_frac))
+                if flare_template == 'Jackman':
+                    tpeak_truth = F.tpeak_conv
+                    FWHM_truth = F.fwhm_conv
+                    ampl_truth = F.ampl_conv
+                    print('tpeak truth: ' + str(F.tpeak_conv))
+                    print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
+                    print('FWHM truth: ' + str(F.fwhm_conv))
+                    print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
+                    print('ampl truth: ' + str(F.ampl_conv))
+                    print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
+                if flare_template == 'Davenport':
+                    tpeak_truth = F.tpeak
+                    FWHM_truth = F.fwhm
+                    ampl_truth = F.ampl
+                    print('tpeak truth: ' + str(F.tpeak))
+                    print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
+                    print('FWHM truth: ' + str(F.fwhm))
+                    print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
+                    print('ampl truth: ' + str(F.ampl))
+                    print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
+                print(' ')
+                print('ED truth: ' + str(F.eqdur_truth_noscatter))
+                print('ED fit: ' + str(F.fit_ED) + ' +/- ' + str(F.fit_ED_err))
+                print('ED obs: ' + str(F.eqdur_obs_noscatter))
+
+                fit_data = {'Template': [flare_template],
+                            'Cadence (min)': [F.cadence],
+                            'tpeak frac': [F.tpeak_frac],
+                            'tpeak frac fit': [F.fit_tpeak_frac],
+                            'tpeak frac fit err': [F.fit_tpeak_frac_err],
+                            'S/N at peak': [F.sig_to_noise[0]],
+                            'tpeak truth': [tpeak_truth],
+                            'tpeak fit': [F.fit_tpeak],
+                            'tpeak fit err': [F.fit_tpeak_err],
+                            'FWHM truth': [FWHM_truth],
+                            'FWHM fit': [F.fit_fwhm],
+                            'FWHM fit err': [F.fit_fwhm_err],
+                            'ampl truth': [ampl_truth],
+                            'ampl fit': [F.fit_ampl],
+                            'ampl fit err':[F.fit_ampl_err],
+                            'ED truth': [F.eqdur_truth_noscatter],
+                            'ED fit': [F.fit_ED],
+                            'ED fit err': [F.fit_ED_err],
+                            'ED obs': [F.eqdur_obs_scatter],
+                            }
+
+                file_name = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Files/Flare_Fit_Data.csv'
+                old_fit_data = pd.read_csv(file_name)
+
+                cols = old_fit_data.columns
+                for col_i, col in enumerate(cols):
+                    current_col = old_fit_data[col].values
+                    for val_i, val in enumerate(current_col):
+                        fit_data[col].append(val)
+
+                df_fit_data = pd.DataFrame(fit_data)
+                df_fit_data.to_csv(file_name, index=False)
+
+
+do_plot_flare_fits = True
 if do_plot_flare_fits == True:
 
     data_file = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Files/Flare_Fit_Data.csv'
