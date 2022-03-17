@@ -6,6 +6,121 @@ import pandas as pd
 import os
 
 
+class FlareFits:
+    def __init__(self, fit_data_file, save_loc):
+        self.fit_data_file = fit_data_file
+        self.save_loc = save_loc
+
+    def read_data_file(self):
+        self.data = pd.read_csv(self.fit_data_file)
+
+    def plot_fit_results(self):
+
+        # plot_text = {'Template': 'Template',
+        #             'Cadence (min)': 'Cadence (min)',
+        #             'tpeak frac': 't$_{peak,true}$ Location\nAs Fraction Between Points',
+        #             'S/N at peak': 'S/N at True Peak Amplitude',
+        #             'tpeak truth': 'True t$_{peak}$',
+        #             'tpeak fit': 'Fit t$_{peak}$',
+        #             'tpeak fit err': 'Fit t$_{peak}$ Err',
+        #             'FWHM truth': 'True FWHM',
+        #             'FWHM fit': 'Fit FWHM',
+        #             'FWHM fit err': 'Fit FWHM Err',
+        #             'ampl truth': 'True Amplitude',
+        #             'ampl fit': 'Fit Amplitude',
+        #             'ampl fit err': 'Fit Amplitude Err',
+        #             'ED truth': 'True ED',
+        #             'ED fit': 'Fit ED',
+        #             'ED fit err': 'Fit ED Err',
+        #             }
+
+        plot_text = {'tpeak': '% Diff From True t$_{peak}$',
+                     'FWHM': '% Diff From True FWHM',
+                     'ampl': '% Diff From True Amplitude',
+                     'ED': '% Diff From True ED',
+                     }
+
+        independent_variables = ['Cadence (min)'] # , 'tpeak frac', 'S/N at peak']
+        plot_subjects = ['ED', 'ampl', 'FWHM', 'tpeak']
+
+
+
+
+
+        num_plots = int(len(plot_subjects) * len(independent_variables))
+
+        num_cols = len(independent_variables)
+        num_rows = len(plot_subjects)
+
+        vpad_base = 0.05
+        vpad = vpad_base / (2. * num_cols)
+        hpad = 0.18
+
+        ax_height = 1./num_rows - vpad
+        ax_width = 0.97
+
+        left_array = [i for i in [hpad]*num_rows]
+        bottom_array = [(i * (ax_height+vpad/2) + vpad_base) for i in range(num_rows)]
+        width_array = [i - hpad for i in [ax_width]*num_rows]
+        height_array = [i for i in [ax_height] * num_rows]
+
+
+        plt.close()
+        font_size = 'medium'
+        # colors = [plt.cm.Spectral(color_i) for color_i in np.linspace(0, 1, num_plots)]
+        colors = ['#003366', '#006600', '#b3003b', '#e65c00', '#595959']
+        colors = ['#e65c00','#b3003b','#006600','#003366']
+        fig = plt.figure(1, figsize=(4*num_cols, 3*num_rows), facecolor="#ffffff")  # , dpi=300)
+        for parameter_i, parameter in enumerate(plot_subjects):
+            ax = fig.add_axes((left_array[parameter_i], bottom_array[parameter_i],
+                               width_array[parameter_i], height_array[parameter_i]))
+
+            x_parameter = independent_variables[0]
+
+            if parameter == 'tpeak':
+                yplot = ((np.array(self.data['tpeak fit'].values) / np.array(self.data['tpeak truth'].values)) - 1.)*100
+                yploterr = np.sqrt((100./np.array(self.data['tpeak truth'].values))**2 * np.array(self.data['tpeak fit err'].values)**2)
+            if parameter == 'FWHM':
+                yplot = ((np.array(self.data['FWHM fit'].values) / np.array(self.data['FWHM truth'].values)) - 1.)*100
+                yploterr = np.sqrt((100./np.array(self.data['FWHM truth'].values))**2 * np.array(self.data['FWHM fit err'].values)**2)
+            if parameter == 'ampl':
+                yplot = ((np.array(self.data['ampl fit'].values) / np.array(self.data['ampl truth'].values)) - 1.)*100
+                yploterr = np.sqrt((100./np.array(self.data['ampl truth'].values))**2 * np.array(self.data['ampl fit err'].values)**2)
+            if parameter == 'ED':
+                yplot = ((np.array(self.data['ED fit'].values) / np.array(self.data['ED truth'].values)) - 1.)*100
+                yploterr = np.sqrt((100./np.array(self.data['ED truth'].values))**2 * np.array(self.data['ED fit err'].values)**2)
+
+            if x_parameter == 'Cadence (min)':
+                xplot = np.array(self.data[x_parameter].values)
+
+            ax.set_ylabel(plot_text[parameter], fontsize=font_size)
+            if parameter_i == 0:
+                ax.set_xlabel(x_parameter, fontsize=font_size)
+            if parameter_i != 0:
+                ax.set_xticklabels([])
+
+            ymax = max(yplot) + 0.1*(max(yplot) - min(yplot))
+            ymin = min(yplot) - 0.1*(max(yplot) - min(yplot))
+            xmax = max(xplot) + 0.1 * (max(xplot) - min(xplot))
+            xmin = min(xplot) - 0.1 * (max(xplot) - min(xplot))
+
+            ax.plot([xmin, xmax],[0,0], color='#000000', alpha=0.2, lw=1.5, zorder=0)
+            ax.scatter(xplot, yplot, color=colors[parameter_i], s=np.pi*(3)**2, zorder=1)
+            ax.errorbar(xplot, yplot, yerr=yploterr, fmt='None', ecolor=colors[parameter_i], elinewidth=2, capsize=2, capthick=2, zorder=1)
+
+
+
+            ax.set_ylim([ymin, ymax])
+            ax.set_xlim([xmin, xmax])
+            ax.tick_params(axis='both', direction='in', labelsize=font_size, top=True, right=False)
+        plt.savefig(self.save_loc, dpi=300)
+        plt.close()
+
+
+
+
+
+
 class Flares:
     def __init__(self, template, cadence, tpeak, fwhm, ampl, downsample, GA, time_range, bench_frac, random_bench, save_movie_dir):
         self.template = template
@@ -207,7 +322,7 @@ class Flares:
         for point_i in range(len(y_synth)):
             Sig = y_synth[point_i] + 1.
             SNR_sig = (Sig * np.sqrt(exptime_sec)) / np.sqrt(Sig)
-            err_sig = (1. / SNR_sig) / 10
+            err_sig = (1. / SNR_sig) / (10/2.5)
             Sig_scatter = np.random.normal(Sig, err_sig, 1)[0]
             synth_flare_scatter.append(Sig_scatter - 1.)
             synth_flare_err.append(err_sig)
@@ -265,7 +380,7 @@ class Flares:
             for point_i in range(len(synth_flare)):
                 Sig = synth_flare[point_i] + 1.
                 SNR_sig = (Sig * np.sqrt(exptime_sec)) / np.sqrt(Sig)
-                err_sig = (1. / SNR_sig) / 10
+                err_sig = (1. / SNR_sig) / (10/2.5)
                 Sig_scatter = np.random.normal(Sig, err_sig, 1)[0]
                 synth_flare_scatter.append(Sig_scatter - 1.)
                 synth_flare_err.append(err_sig)
@@ -370,11 +485,17 @@ class Flares:
         # where_flare_scatter = self.x_flare[self.y_flare_scatter >= 0.02]
         # where_under_scatter = ((max(where_flare_scatter) - min(where_flare_scatter)) * u.d).to(u.s).value
 
-        eqdur_noscatter = np.trapz(self.y_flare_noscatter, x=self.x_flare)
-        self.eqdur_noscatter = eqdur_noscatter * (24 * 60 * 60) # + where_under_noscatter  # convert days to seconds
+        eqdur_obs_noscatter = np.trapz(self.y_flare_noscatter, x=self.x_flare)
+        self.eqdur_obs_noscatter = eqdur_obs_noscatter * (24 * 60 * 60) # + where_under_noscatter  # convert days to seconds
 
-        eqdur_scatter = np.trapz(self.y_flare_scatter, x=self.x_flare)
-        self.eqdur_scatter = eqdur_scatter * (24 * 60 * 60) # + where_under_scatter # convert days to seconds
+        eqdur_obs_scatter = np.trapz(self.y_flare_scatter, x=self.x_flare)
+        self.eqdur_obs_scatter = eqdur_obs_scatter * (24 * 60 * 60) # + where_under_scatter # convert days to seconds
+
+        eqdur_truth_noscatter = np.trapz(self.y_synth_noscatter, x=self.x_synth)
+        self.eqdur_truth_noscatter = eqdur_truth_noscatter * (24 * 60 * 60)  # + where_under_noscatter  # convert days to seconds
+
+        eqdur_truth_scatter = np.trapz(y_synth_scatter, x=self.x_synth)
+        self.eqdur_truth_scatter = eqdur_truth_scatter * (24 * 60 * 60)  # + where_under_scatter # convert days to seconds
     def generate_candidate(self, guess_tpeak, guess_fwhm, guess_ampl):
         if self.template == 'Davenport':
             x_synth_candidate, y_synth_scatter_candidate, y_synth_err_candidate, y_synth_noscatter_candidate = self.create_single_synthetic(
@@ -404,19 +525,13 @@ class Flares:
         self.y_flare_err_candidate = y_flare_err_candidate[(x_flare_candidate >= self.time_range[0]) & (x_flare_candidate <= self.time_range[1])]
         self.y_flare_noscatter_candidate = y_flare_noscatter_candidate[(x_flare_candidate >= self.time_range[0]) & (x_flare_candidate <= self.time_range[1])]
 
-        # where_flare_noscatter_candidate = self.x_flare_candidate[self.y_flare_noscatter_candidate >= 0.02]
-        # if len(where_flare_noscatter_candidate) > 0:
-        #     where_under_noscatter_candidate = ((max(where_flare_noscatter_candidate) - min(where_flare_noscatter_candidate)) * u.d).to(u.s).value
-        # else:
-        #     print('bep')
-        #     where_under_noscatter_candidate = ((max(self.x_flare_candidate) - min(self.x_flare_candidate)) * u.d).to(u.s).value
-        #
-        #
-        # where_flare_scatter_candidate = self.x_flare_candidate[self.y_flare_scatter_candidate >= 0.02]
-        # if len(where_flare_scatter_candidate) > 0:
-        #     where_under_scatter_candidate = ((max(where_flare_scatter_candidate) - min(where_flare_scatter_candidate)) * u.d).to(u.s).value
-        # else:
-        #     where_under_scatter_candidate = ((max(self.x_flare_candidate) - min(self.x_flare_candidate)) * u.d).to(u.s).value
+        self.tpeak_candidate = self.x_flare_candidate[np.where(self.y_flare_scatter_candidate == max(self.y_flare_scatter_candidate))[0][0]]
+        crossing = np.sign(self.tpeak - self.x_flare)
+        zero_crossing = (crossing[0:-2] != crossing[1:-1])
+        where_zero_crossing = np.where(zero_crossing)[0]
+        prior_crossing = self.x_flare[where_zero_crossing[0]]
+        post_crossing = self.x_flare[where_zero_crossing[0] + 1]
+        self.tpeak_frac_candidate = (self.tpeak_candidate - prior_crossing)/(post_crossing - prior_crossing)
 
         eqdur_noscatter_candidate = np.trapz(self.y_flare_noscatter_candidate, x=self.x_flare_candidate)
         self.eqdur_noscatter_candidate = eqdur_noscatter_candidate * (24 * 60 * 60) # + where_under_noscatter_candidate # convert days to seconds
@@ -436,7 +551,10 @@ class Flares:
            #  evenly_spaced_interval = np.linspace(0, 1, len(any_x))
             # colors = [cm.rainbow(smoosh) for smoosh in evenly_spaced_interval]
             # colors = [cm.Spectral(smoosh) for smoosh in evenly_spaced_interval]
-            colors = ['#005580', '#ff9900', '#cc0052']
+            truth_color = '#cccccc' # '#005580'
+            point_color = '#ff9900'
+            fit_color = '#cc0052'
+            colors = [truth_color, point_color, fit_color]
             # colors = [mycolormap(smoosh) for smoosh in evenly_spaced_interval]
         if len(any_x) == 1:
             colors = ['#000000']
@@ -445,7 +563,7 @@ class Flares:
 
         fig = plt.figure(1, figsize=(6, 5.5), facecolor="#ffffff")  # , dpi=300)
         ax = fig.add_subplot(111)
-        ax.set_title(plot_title, fontsize=font_size, style='normal', family='sans-serif')
+        # ax.set_title(plot_title, fontsize=font_size, style='normal', family='sans-serif')
 
         for v in range(len(any_x)):
 
@@ -460,18 +578,23 @@ class Flares:
                 ax.set_ylim([0, 1.1 * np.max(y_hist)])
 
             if plot_type_y[v] == 'line':
-                ax.plot(any_x[v], any_y[v], color=colors[v], lw=2, alpha=plot_alpha_y[v], label=label_y[v], zorder=0)
+                if v == 0:
+                    zrdr = 0
+                if v == 1:
+                    zrdr = 1
+                ax.plot(any_x[v], any_y[v], color=colors[v], lw=2, alpha=plot_alpha_y[v], label=label_y[v], zorder=zrdr)
 
             if plot_type_y[v] == 'scatter':
+                zrdr = 0.5
                 if np.shape(any_y[v])[0] == 2:
                     # print('Plotting Errorbars In QuickTestPlot')
                     ax.scatter(any_x[v], any_y[v][0], color=colors[v], s=np.pi * (3) ** 2, alpha=plot_alpha_y[v],
-                               label=label_y[v], zorder=1)
+                               label=label_y[v], zorder=zrdr)
                     ax.errorbar(any_x[v], any_y[v][0], yerr=any_y[v][1], fmt='None', ecolor=colors[v], elinewidth=2,
-                                capsize=2, capthick=2, alpha=plot_alpha_y[v], zorder=1)
+                                capsize=2, capthick=2, alpha=plot_alpha_y[v], zorder=zrdr)
                 else:
                     ax.scatter(any_x[v], any_y[v], color=colors[v], s=np.pi * (3) ** 2, alpha=plot_alpha_y[v],
-                               label=label_y[v], zorder=1)
+                               label=label_y[v], zorder=zrdr)
 
             if plot_type_y[v] == 'fill_between_x':
                 ax.fill_betweenx(any_y[v], any_x[v][1], any_x[v][0], color='#ccccff', alpha=plot_alpha_y[v])
@@ -602,10 +725,10 @@ class Flares:
 
     def do_GA(self):
 
-        initial_pop_size = 5
+        initial_pop_size = 10
         n_pop = 10
         n_children = 5
-        n_iter = 100
+        n_iter = 50
         max_age = 10
 
         if self.template == 'Davenport':
@@ -616,7 +739,7 @@ class Flares:
             the_true_tpeak = self.tpeak_conv
             the_true_fwhm = self.fwhm_conv
             the_true_ampl = self.ampl_conv
-        the_true_ED = self.eqdur_noscatter
+        the_true_ED = self.eqdur_truth_noscatter
 
         save_every = 20
 
@@ -627,6 +750,7 @@ class Flares:
         master_population_fitnesses = []
         master_population_ages = []
         master_population_EDs = []
+        master_population_tpeakfracs = []
 
         percent_diff_gene_tracker = []
         gene_tracker = []
@@ -648,6 +772,7 @@ class Flares:
             population_fitnesses = []
             population_ages = []
             population_EDs = []
+            population_tpeakfracs = []
 
             fwhm_guess_calc = self.get_fwhm(self.x_flare, self.y_flare_scatter)
 
@@ -670,6 +795,7 @@ class Flares:
                     population_fitnesses.append(fitness)
                     population_ages.append(0)
                     population_EDs.append(self.eqdur_noscatter_candidate)
+                    population_tpeakfracs.append(self.tpeak_frac_candidate)
 
             sort_inds = np.array(population_fitnesses).argsort()
             population_genes = np.array(population_genes)[sort_inds[::-1]]
@@ -677,18 +803,25 @@ class Flares:
             population_fitnesses = np.array(population_fitnesses)[sort_inds[::-1]]
             population_ages = np.array(population_ages)[sort_inds[::-1]]
             population_EDs = np.array(population_EDs)[sort_inds[::-1]]
+            population_tpeakfracs = np.array(population_tpeakfracs)[sort_inds[::-1]]
+
+            where_1 = np.where(population_tpeakfracs == 1)[0]
+            if len(where_1) > 0:
+                population_tpeakfracs[where_1] = 0.
 
             population_genes = list(population_genes)
             population_pool = list(population_pool)
             population_fitnesses = list(population_fitnesses)
             population_ages = list(population_ages)
             population_EDs = list(population_EDs)
+            population_tpeakfracs = list(population_tpeakfracs)
 
             master_population_genes.append(population_genes[0])
             master_population_pool.append(population_pool[0])
             master_population_fitnesses.append(population_fitnesses[0])
             master_population_ages.append(population_ages[0])
             master_population_EDs.append(population_EDs[0])
+            master_population_tpeakfracs.append(population_tpeakfracs[0])
 
 
         population_genes2 = master_population_genes
@@ -696,6 +829,7 @@ class Flares:
         population_fitnesses2 = master_population_fitnesses
         population_ages2 = master_population_ages
         population_EDs2 = master_population_EDs
+        population_tpeakfracs2 = master_population_tpeakfracs
 
 
         for iter_i in range(n_iter):
@@ -778,7 +912,7 @@ class Flares:
                     random_draw = np.random.choice(tpeak_draw_pool)  # See if it mutates
                     if random_draw == True:  # Does it mutate
                         if np.random.choice([True, False, False]) == True:  # Is it a big mutation
-                            tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.50 * self.cadence / 24. / 60., 1)[0])
+                            tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.75 * self.cadence / 24. / 60., 1)[0])
                         else:
                             tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.05 * self.cadence / 24. / 60., 1)[0])
 
@@ -786,9 +920,9 @@ class Flares:
                     random_draw = np.random.choice(fwhm_draw_pool)  # See if it mutates
                     if random_draw == True:  # Does it mutate
                         if np.random.choice([True, False, False]) == True:  # Is it a big mutation
-                            fwhm_guess = np.abs(np.random.normal(old_fwhm_guess, 0.50 * old_fwhm_guess, 1)[0])
+                            fwhm_guess = np.abs(np.random.uniform(0.50*old_fwhm_guess, 1.50*old_fwhm_guess, 1)[0])
                         else:
-                            fwhm_guess = np.abs(np.random.normal(old_fwhm_guess, 0.05 * old_fwhm_guess, 1)[0])
+                            fwhm_guess = np.abs(np.random.uniform(0.90 * old_fwhm_guess, 1.10 * old_fwhm_guess, 1)[0])
 
                 if made_ampl_guess != 1:
                     old_ampl_guess = np.copy(ampl_guess)
@@ -816,6 +950,7 @@ class Flares:
                         population_fitnesses2.append(fitness)
                         population_ages2.append(0)
                         population_EDs2.append(self.eqdur_noscatter_candidate)
+                        population_tpeakfracs2.append(self.tpeak_frac_candidate)
 
 
             draw_new_member = np.random.choice(new_member_draw_pool)
@@ -839,6 +974,7 @@ class Flares:
                         population_fitnesses2.append(fitness)
                         population_ages2.append(0)
                         population_EDs2.append(self.eqdur_noscatter_candidate)
+                        population_tpeakfracs2.append(self.tpeak_frac_candidate)
 
 
             sort_inds = np.array(population_fitnesses2).argsort()
@@ -847,18 +983,25 @@ class Flares:
             population_fitnesses3 = np.array(population_fitnesses2)[sort_inds[::-1]]
             population_ages3 = np.array(population_ages2)[sort_inds[::-1]]
             population_EDs3 = np.array(population_EDs2)[sort_inds[::-1]]
+            population_tpeakfracs3 = np.array(population_tpeakfracs2)[sort_inds[::-1]]
+
+            where_1 = np.where(population_tpeakfracs3 == 1)[0]
+            if len(where_1) > 0:
+                population_tpeakfracs3[where_1] = 0.
 
             population_genes4 = list(population_genes3[0:n_pop])
             population_pool4 = list(population_pool3[0:n_pop])
             population_fitnesses4 = list(population_fitnesses3[0:n_pop])
             population_ages4 = list(population_ages3[0:n_pop])
             population_EDs4 = list(population_EDs3[0:n_pop])
+            population_tpeakfracs4 = list(population_tpeakfracs3[0:n_pop])
 
             population_genes2 = copy.deepcopy(population_genes4)
             population_pool2 = copy.deepcopy(population_pool4)
             population_fitnesses2 = copy.deepcopy(population_fitnesses4)
             population_ages2 = copy.deepcopy(population_ages4)
             population_EDs2 = copy.deepcopy(population_EDs4)
+            population_tpeakfracs2 = copy.deepcopy(population_tpeakfracs4)
 
 
 
@@ -870,6 +1013,7 @@ class Flares:
                 population_pool2_young = list(np.array(population_pool2)[where_young])
                 population_fitnesses2_young = list(np.array(population_fitnesses2)[where_young])
                 population_EDs2_young = list(np.array(population_EDs2)[where_young])
+                population_tpeakfracs2_young = list(np.array(population_tpeakfracs2)[where_young])
 
 
 
@@ -925,24 +1069,23 @@ class Flares:
                         random_draw = np.random.choice(tpeak_draw_pool)
                         if random_draw == True:  # Does it mutate
                             if np.random.choice([True, False, False]) == True:  # Is it a big mutation
-                                tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.50 * self.cadence / 24. / 60., 1)[0])
+                                tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.75 * self.cadence / 24. / 60., 1)[0])
                             else:
                                 tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.05 * self.cadence / 24. / 60., 1)[0])
 
-                    # fwhm_mutated = False
                     if made_fwhm_guess != 1:
                         random_draw = np.random.choice(fwhm_draw_pool)
                         if random_draw == True:  # Does it mutate
                             if np.random.choice([True, False, False]) == True:  # Is it a big mutation
-                                fwhm_guess = np.abs(np.random.normal(old_fwhm_guess, 0.50 * old_fwhm_guess, 1)[0])
+                                fwhm_guess = np.abs(np.random.uniform(0.50 * old_fwhm_guess, 1.50 * old_fwhm_guess, 1)[0])
                             else:
-                                fwhm_guess = np.abs(np.random.normal(old_fwhm_guess, 0.05 * old_fwhm_guess, 1)[0])
+                                fwhm_guess = np.abs(np.random.uniform(0.90 * old_fwhm_guess, 1.10 * old_fwhm_guess, 1)[0])
 
                     if made_ampl_guess != 1:
                         old_ampl_guess = np.copy(ampl_guess)
                         random_draw = np.random.choice(ampl_draw_pool)
                         if random_draw == True:  # Does it mutate
-                            if np.random.choice([True, False, False, False]) == True:  # Is it a big mutation
+                            if np.random.choice([True, False, False, False]) == True:  # Is it a big, big mutation
                                 ampl_guess = np.abs(np.random.uniform(0.50 * old_ampl_guess, 2 * old_ampl_guess, 1)[0])
                             elif np.random.choice([True, False, False]) == True:
                                 ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.05*old_ampl_guess, 1)[0])
@@ -973,6 +1116,7 @@ class Flares:
                             population_fitnesses2_young.append(fitness)
                             population_ages2_young.append(0)
                             population_EDs2_young.append(self.eqdur_noscatter_candidate)
+                            population_tpeakfracs2_young.append(self.tpeak_frac_candidate)
 
 
                 draw_new_member = np.random.choice(new_member_draw_pool)
@@ -996,6 +1140,7 @@ class Flares:
                             population_fitnesses2_young.append(fitness)
                             population_ages2_young.append(0)
                             population_EDs2_young.append(self.eqdur_noscatter_candidate)
+                            population_tpeakfracs2_young.append(self.tpeak_frac_candidate)
 
                 sort_inds = np.array(population_fitnesses2_young).argsort()
                 population_genes3 = np.array(population_genes2_young)[sort_inds[::-1]]
@@ -1003,22 +1148,31 @@ class Flares:
                 population_fitnesses3 = np.array(population_fitnesses2_young)[sort_inds[::-1]]
                 population_ages3 = np.array(population_ages2_young)[sort_inds[::-1]]
                 population_EDs3 = np.array(population_EDs2_young)[sort_inds[::-1]]
+                population_tpeakfracs3 = np.array(population_tpeakfracs2_young)[sort_inds[::-1]]
+
+                where_1 = np.where(population_tpeakfracs3 == 1)[0]
+                if len(where_1) > 0:
+                    population_tpeakfracs3[where_1] = 0.
 
                 population_genes4 = list(population_genes3)
                 population_pool4 = list(population_pool3)
                 population_fitnesses4 = list(population_fitnesses3)
                 population_ages4 = list(population_ages3)
                 population_EDs4 = list(population_EDs3)
+                population_tpeakfracs4 = list(population_tpeakfracs3)
 
                 population_genes2 = copy.deepcopy(population_genes4)
                 population_pool2 = copy.deepcopy(population_pool4)
                 population_fitnesses2 = copy.deepcopy(population_fitnesses4)
                 population_ages2 = copy.deepcopy(population_ages4)
                 population_EDs2 = copy.deepcopy(population_EDs4)
+                population_tpeakfracs2 = copy.deepcopy(population_tpeakfracs4)
 
 
-            print('pop length: ' + str(len(population_fitnesses2)))
-            print(' ')
+
+
+            # print('pop length: ' + str(len(population_fitnesses2)))
+            # print(' ')
 
 
             # -------------- track gene progression ----------------#
@@ -1078,7 +1232,7 @@ class Flares:
                     plot_alphas_y = [1.0, 1.0, 1.0]
 
                     # thres_y = [0, 1.1 * np.max([np.max(self.y_synth_noscatter), np.max(self.y_flare_scatter), np.max(self.y_synth_noscatter_candidate)])]
-                    thres_y = [0, 1.05]
+                    thres_y = [0, 1.05*max(self.y_synth_noscatter_candidate)]
                     x_range = self.time_range
 
                     label_y = ['Truth', 'Simulated Observations', 'Best Fit']
@@ -1101,7 +1255,7 @@ class Flares:
                     plot_types_y = ['line', 'scatter', 'line']
                     plot_alphas_y = [1.0, 1.0, 1.0]
 
-                    thres_y = [0, 1.05]
+                    thres_y = [0, 1.05*max(self.y_synth_noscatter_candidate)]
                     x_range = self.time_range
 
                     label_y = ['Truth', 'Simulated Observations', 'Best Fit']
@@ -1128,7 +1282,7 @@ class Flares:
                     plot_alphas_y = [1.0, 1.0, 1.0]
 
                     # thres_y = [0, 1.1 * np.max([np.max(self.y_synth_noscatter), np.max(self.y_flare_scatter), np.max(self.y_synth_noscatter_candidate)])]
-                    thres_y = [0, 1.05]
+                    thres_y = [0, 1.05*max(self.y_synth_noscatter_candidate)]
                     x_range = self.time_range
 
                     label_y = ['Truth', 'Simulated Observations', 'Best Fit']
@@ -1148,11 +1302,14 @@ class Flares:
         self.fit_fwhm = population_genes2[0][1]
         self.fit_ampl = population_genes2[0][2]
         self.fit_ED = population_EDs2[0]
+        self.fit_tpeak_frac = population_tpeakfracs2[0]
 
         self.fit_tpeak_err = np.std(population_genes2_temp[0])
         self.fit_fwhm_err = np.std(population_genes2_temp[1])
         self.fit_ampl_err = np.std(population_genes2_temp[2])
         self.fit_ED_err = np.std(population_EDs2)
+        self.fit_tpeak_frac_err = np.std(population_tpeakfracs2)
+
 
 
     def fit_flare(self):
@@ -1160,23 +1317,25 @@ class Flares:
 
 
 
-def set_directory(save_dir, fl_template, lc_cadence):
+
+
+def set_directory(save_dir, fl_template, lc_cadence, lc_tfrac):
     does_dir_exist = False
     dir_nums = []
     for sub_dir in os.listdir(save_dir):
         dir = os.path.join(save_dir, sub_dir)
         if os.path.isdir(dir):
-            if fl_template + '_' + str(lc_cadence) in dir:
+            if fl_template + '_' + str(lc_cadence) + '_' + str(np.round(lc_tfrac,1)) in dir:
                 dir_num = int(dir[-1])
                 dir_nums.append(dir_num)
                 does_dir_exist = True
 
     if does_dir_exist == False:
-        new_dir = save_dir + fl_template + '_' + str(lc_cadence) + '_' + str(0)
+        new_dir = save_dir + fl_template + '_' + str(lc_cadence) + '_' + str(np.round(lc_tfrac,1)) + '_' + str(0)
         os.mkdir(new_dir)
 
     if does_dir_exist == True:
-        new_dir = save_dir + fl_template + '_' + str(lc_cadence) + '_' + str(int(dir_nums[-1] + 1))
+        new_dir = save_dir + fl_template + '_' + str(lc_cadence) + '_' + str(np.round(lc_tfrac,1)) + '_' + str(int(dir_nums[0] + 1))
         os.mkdir(new_dir)
 
     new_dir += '/'
@@ -1189,87 +1348,109 @@ stddev = 0.001 * (1. / 50)
 do_GA_fit = True
 if do_GA_fit == True:
 
-    lightcurve_cadence = 25.0  # minutes
-    start_at_cadence_fraction = 0.0
+    test_t_fractions = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    test_cadences = [30.0, 2.0, 10./60., 1.0, 20.0, 10.0]  # 16.0, 8.0, 4.0]
 
-    t_range = [0.475, 0.60]
+    for t_frac_i, t_frac in enumerate(test_t_fractions):
+        for lc_cad_i, lc_cad in enumerate(test_cadences):
 
-    set_tpeak = 0.5 # days
-    set_fwhm = 10.0 # min
-    set_ampl = 1.0
+            lightcurve_cadence = lc_cad  # minutes
+            start_at_cadence_fraction = t_frac
 
-    flare_template = 'Jackman'
+            t_range = [0.475, 0.60]
 
-    save_directory = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/'
-    save_movie_directory = set_directory(save_dir=save_directory, fl_template=flare_template, lc_cadence=lightcurve_cadence)
+            set_tpeak = 0.5 # days
+            set_fwhm = 10.0 # min
+            set_ampl = 1.0
+
+            flare_template = 'Jackman'
+
+            save_directory = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/'
+            save_movie_directory = set_directory(save_dir=save_directory, fl_template=flare_template,
+                                                 lc_cadence=lightcurve_cadence, lc_tfrac=start_at_cadence_fraction)
 
 
-    # import pdb; pdb.set_trace()
+            # import pdb; pdb.set_trace()
 
-    F = Flares(template=flare_template, cadence=lightcurve_cadence, tpeak=set_tpeak, fwhm=set_fwhm, ampl=set_ampl,
-               downsample=True, GA=True, time_range=t_range, bench_frac=start_at_cadence_fraction, random_bench=False,
-               save_movie_dir=save_movie_directory)
-    F.generate_flare()
-    F.fit_flare()
+            F = Flares(template=flare_template, cadence=lightcurve_cadence, tpeak=set_tpeak, fwhm=set_fwhm, ampl=set_ampl,
+                       downsample=True, GA=True, time_range=t_range, bench_frac=start_at_cadence_fraction, random_bench=False,
+                       save_movie_dir=save_movie_directory)
+            F.generate_flare()
+            F.fit_flare()
 
-    print(' ')
-    print('Template: ' + flare_template)
-    print('------------------')
-    print('S/N at peak: ' + str(F.sig_to_noise))
-    print('tpeak frac: ' + str(F.tpeak_frac))
-    if flare_template == 'Jackman':
-        tpeak_truth = F.tpeak_conv
-        FWHM_truth = F.fwhm_conv
-        ampl_truth = F.ampl_conv
-        print('tpeak truth: ' + str(F.tpeak_conv))
-        print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
-        print('FWHM truth: ' + str(F.fwhm_conv))
-        print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
-        print('ampl truth: ' + str(F.ampl_conv))
-        print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
-    if flare_template == 'Davenport':
-        tpeak_truth = F.tpeak
-        FWHM_truth = F.fwhm
-        ampl_truth = F.ampl
-        print('tpeak truth: ' + str(F.tpeak))
-        print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
-        print('FWHM truth: ' + str(F.fwhm))
-        print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
-        print('ampl truth: ' + str(F.ampl))
-        print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
-    print(' ')
-    print('ED truth: ' + str(F.eqdur_noscatter))
-    print('ED fit: ' + str(F.fit_ED) + ' +/- ' + str(F.fit_ED_err))
+            print(' ')
+            print('Template: ' + flare_template)
+            print('------------------')
+            print('S/N at peak: ' + str(F.sig_to_noise))
+            print('tpeak frac: ' + str(F.tpeak_frac))
+            if flare_template == 'Jackman':
+                tpeak_truth = F.tpeak_conv
+                FWHM_truth = F.fwhm_conv
+                ampl_truth = F.ampl_conv
+                print('tpeak truth: ' + str(F.tpeak_conv))
+                print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
+                print('FWHM truth: ' + str(F.fwhm_conv))
+                print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
+                print('ampl truth: ' + str(F.ampl_conv))
+                print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
+            if flare_template == 'Davenport':
+                tpeak_truth = F.tpeak
+                FWHM_truth = F.fwhm
+                ampl_truth = F.ampl
+                print('tpeak truth: ' + str(F.tpeak))
+                print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
+                print('FWHM truth: ' + str(F.fwhm))
+                print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
+                print('ampl truth: ' + str(F.ampl))
+                print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
+            print(' ')
+            print('ED truth: ' + str(F.eqdur_truth_noscatter))
+            print('ED fit: ' + str(F.fit_ED) + ' +/- ' + str(F.fit_ED_err))
+            print('ED obs: ' + str(F.eqdur_obs_noscatter))
 
-    fit_data = {'Template': [flare_template],
-                'Cadence (min)': [F.cadence],
-                'tpeak frac': [F.tpeak_frac],
-                'S/N at peak': [F.sig_to_noise],
-                'tpeak truth': [tpeak_truth],
-                'tpeak fit': [F.fit_tpeak],
-                'tpeak fit err': [F.fit_tpeak_err],
-                'FWHM truth': [FWHM_truth],
-                'FWHM fit': [F.fit_fwhm],
-                'FWHM fit err': [F.fit_fwhm_err],
-                'ampl truth': [ampl_truth],
-                'ampl fit': [F.fit_ampl],
-                'ampl fit err':[F.fit_ampl_err],
-                'ED truth': [F.eqdur_noscatter],
-                'ED fit': [F.fit_ED],
-                'ED fit err': [F.fit_ED_err],
-                }
+            fit_data = {'Template': [flare_template],
+                        'Cadence (min)': [F.cadence],
+                        'tpeak frac': [F.tpeak_frac],
+                        'tpeak frac fit': [F.fit_tpeak_frac],
+                        'tpeak frac fit err': [F.fit_tpeak_frac_err],
+                        'S/N at peak': [F.sig_to_noise[0]],
+                        'tpeak truth': [tpeak_truth],
+                        'tpeak fit': [F.fit_tpeak],
+                        'tpeak fit err': [F.fit_tpeak_err],
+                        'FWHM truth': [FWHM_truth],
+                        'FWHM fit': [F.fit_fwhm],
+                        'FWHM fit err': [F.fit_fwhm_err],
+                        'ampl truth': [ampl_truth],
+                        'ampl fit': [F.fit_ampl],
+                        'ampl fit err':[F.fit_ampl_err],
+                        'ED truth': [F.eqdur_truth_noscatter],
+                        'ED fit': [F.fit_ED],
+                        'ED fit err': [F.fit_ED_err],
+                        'ED obs': [F.eqdur_obs_scatter],
+                        }
 
-    file_name = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Files/Flare_Fit_Data.csv'
-    old_fit_data = pd.read_csv(file_name)
+            file_name = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Files/Flare_Fit_Data.csv'
+            old_fit_data = pd.read_csv(file_name)
 
-    cols = old_fit_data.columns
-    for col_i, col in enumerate(cols):
-        current_col = old_fit_data[col].values
-        for val_i, val in enumerate(current_col):
-            fit_data[col].append(val)
+            cols = old_fit_data.columns
+            for col_i, col in enumerate(cols):
+                current_col = old_fit_data[col].values
+                for val_i, val in enumerate(current_col):
+                    fit_data[col].append(val)
 
-    df_fit_data = pd.DataFrame(fit_data)
-    df_fit_data.to_csv(file_name, index=False)
+            df_fit_data = pd.DataFrame(fit_data)
+            df_fit_data.to_csv(file_name, index=False)
+
+
+do_plot_flare_fits = False
+if do_plot_flare_fits == True:
+
+    data_file = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Files/Flare_Fit_Data.csv'
+    save_file = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/Fit_Parameters.pdf'
+
+    plot_fits = FlareFits(fit_data_file=data_file, save_loc=save_file)
+    plot_fits.read_data_file()
+    plot_fits.plot_fit_results()
 
 
 do_compare_modelpars = False
