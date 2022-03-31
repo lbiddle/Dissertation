@@ -16,10 +16,11 @@ class FlareFits:
 
     def plot_fit_results(self):
 
-        test_t_fractions = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.0]
+        test_t_fractions = [0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95, 0.05]
         test_cadences = [30.0, 2.0, 10. / 60., 1.0, 20.0, 10.0]
-        SNR_binwidth = max(self.data['S/N at peak'].values)/15
-        SNR_bins = np.arange(0,max(self.data['S/N at peak'].values)+ SNR_binwidth,SNR_binwidth)
+        max_SNR = 250  # max(self.data['S/N at peak'].values)
+        SNR_binwidth = max_SNR/15
+        SNR_bins = np.arange(0,max_SNR + SNR_binwidth,SNR_binwidth)
 
         plot_text = {'tpeak': '% Diff From True t$_{peak}$',
                      'FWHM': '% Diff From True FWHM',
@@ -184,7 +185,7 @@ class FlareFits:
 
 
 class Flares:
-    def __init__(self, template, cadence, tpeak, fwhm, ampl, downsample, GA, time_range, bench_frac, random_bench, save_movie_dir):
+    def __init__(self, template, fit_template, cadence, tpeak, fwhm, ampl, downsample, GA, time_range, bench_frac, random_bench, save_movie_dir):
         self.template = template
         self.cadence = cadence
         self.tpeak = tpeak
@@ -196,6 +197,7 @@ class Flares:
         self.bench_frac = bench_frac
         self.random_bench = random_bench
         self.save_movie_dir = save_movie_dir
+        self.fit_template = fit_template
 
     def get_fwhm(self, x_in, y_in):
 
@@ -214,6 +216,7 @@ class Flares:
             # plt.plot(x_in, y_in)
             # plt.show()
             # import pdb; pdb.set_trace()
+            x1 = float('nan')
 
         try:
             x2 = np.mean(x_interp[where_zero_crossings[1]:where_zero_crossings[1] + 1])
@@ -222,6 +225,7 @@ class Flares:
             # plt.plot(x_in, y_in)
             # plt.show()
             # import pdb; pdb.set_trace()
+            x2 = float('nan')
 
         return x2 - x1
     def get_fwhm2(self, x_in, y_in, y_err, do_interp=True):
@@ -446,37 +450,35 @@ class Flares:
                 Sig_scatter = np.random.normal(Sig, err_sig, 1)[0]
                 synth_flare_scatter.append(Sig_scatter - 1.)
                 synth_flare_err.append(err_sig)
-            # print(' ')
-            # #print('err:' + str(synth_flare_err))
-            # print('max err: ' + str(np.max(synth_flare_err)))
-            # print('min err: ' + str(np.min(synth_flare_err)))
-            # # print('errs around max: ' + str(synth_flare_err[wheremax - 10:wheremax + 10]))
-            # print(' ')
 
             synth_flare_scatter = np.array(synth_flare_scatter)
             synth_flare_err = np.array(synth_flare_err)
 
-            # determine flare fwhm
-            # fwhm = get_fwhm(x_synth, synth_flare, do_interp=False)
-            # try:
-            #     fwhm_calc, fwhm_plus, fwhm_minus = self.get_fwhm2(x_synth, synth_flare, synth_flare_err, do_interp=True)
             try:
                 fwhm_calc = self.get_fwhm(x_synth, synth_flare)
             except:
                 flag = 0
-                # plt.plot(x_synth, synth_flare)
-                # plt.show()
-                # import pdb; pdb.set_trace()
             else:
                 flag = 1
 
-        if np.isscalar(fwhm_calc) == False:
-            fwhm_convolved = fwhm_calc[0]*24*60 # days converted to minutes
-        else:
-            fwhm_convolved = fwhm_calc*24*60 # days converted to minutes
+        if np.isnan(fwhm_calc) == False:
+            if np.isscalar(fwhm_calc) == False:
+                fwhm_convolved = fwhm_calc[0]*24*60 # days converted to minutes
+            else:
+                fwhm_convolved = fwhm_calc*24*60 # days converted to minutes
 
-        tpeak_convolved = x_synth[np.where(synth_flare == max(synth_flare))[0][0]]
-        ampl_convolved = max(synth_flare)
+            tpeak_convolved = x_synth[np.where(synth_flare == max(synth_flare))[0][0]]
+            ampl_convolved = max(synth_flare)
+
+        if np.isnan(fwhm_calc) == True:
+
+            synth_flare_scatter -= synth_flare_scatter
+            synth_flare -= synth_flare
+            fwhm_convolved = 1
+            tpeak_convolved = 1
+            ampl_convolved = 1
+
+
 
         return x_synth, synth_flare_scatter, synth_flare_err, synth_flare, fwhm_convolved, tpeak_convolved, ampl_convolved
 
@@ -559,10 +561,15 @@ class Flares:
         eqdur_truth_scatter = np.trapz(y_synth_scatter, x=self.x_synth)
         self.eqdur_truth_scatter = eqdur_truth_scatter * (24 * 60 * 60)  # + where_under_scatter # convert days to seconds
     def generate_candidate(self, guess_tpeak, guess_fwhm, guess_ampl):
-        if self.template == 'Davenport':
+        if self.fit_template == 'Davenport':
             x_synth_candidate, y_synth_scatter_candidate, y_synth_err_candidate, y_synth_noscatter_candidate = self.create_single_synthetic(
                 tpeak_val=guess_tpeak, fwhm_val=guess_fwhm, ampl_val=guess_ampl)
-        if self.template == 'Jackman':
+
+            self.x_synth_candidate = x_synth_candidate
+            self.y_synth_noscatter_candidate = y_synth_noscatter_candidate
+
+
+        if self.fit_template == 'Jackman':
             x_synth_candidate, y_synth_scatter_candidate, y_synth_err_candidate, y_synth_noscatter_candidate,\
             fwhm_conv_candidate, tpeak_conv_candidate, ampl_conv_candidate = self.create_single_synthetic_jflare1(
                 tpeak_val=guess_tpeak, fwhm_val=guess_fwhm, ampl_val=guess_ampl)
@@ -697,11 +704,11 @@ class Flares:
         ED_stddevs = stddevs[3]
         stand_in_fitness_stddevs = stddevs[4]
 
-        gene_diffs = {r'(t$_{peak,i}$ - t$_{peak,true}$) / Cadence': (tpeak_diffs * u.d).to(u.min).value,
-                      'Diff From True FWHM (%)': fwhm_diffs,
-                      'Diff From True Peak Flux (%)': ampl_diffs,
-                      'Diff From True ED (%)': ED_diffs,
-                      'Fitness': fitnesses_to_plot,
+        gene_diffs = {r'(t$_{peak,i}$ - t$_{peak,true}$) / Cadence': np.array((tpeak_diffs * u.d).to(u.min).value),
+                      'Diff From True FWHM (%)': np.array(fwhm_diffs),
+                      'Diff From True Peak Flux (%)': np.array(ampl_diffs),
+                      'Diff From True ED (%)': np.array(ED_diffs),
+                      'Fitness': np.array(fitnesses_to_plot),
                       }
         std_diffs = {r'(t$_{peak,i}$ - t$_{peak,true}$) / Cadence': (tpeak_stddevs * u.d).to(u.min).value,
                      'Diff From True FWHM (%)': fwhm_stddevs,
@@ -709,6 +716,10 @@ class Flares:
                      'Diff From True ED (%)': ED_stddevs,
                      'Fitness': stand_in_fitness_stddevs,
                      }
+
+        save_file = self.save_movie_dir + 'gene_progression_' + self.template + '_' + str(self.cadence) + '.csv'
+        gene_diffs_df = pd.DataFrame(gene_diffs)
+        gene_diffs_df.to_csv(save_file, index=False)
 
         vpad_base = 0.05
         vpad = vpad_base/(2.*len(gene_diffs))
@@ -789,11 +800,9 @@ class Flares:
 
     def do_GA(self):
 
-        initial_pop_size = 10
         n_pop = 10
-        n_children = 5
-        n_iter = 50
-        avg_max_age = 10
+        n_children = 10
+        n_iter = 20
 
         if self.template == 'Davenport':
             the_true_tpeak = self.tpeak
@@ -805,7 +814,7 @@ class Flares:
             the_true_ampl = self.ampl_conv
         the_true_ED = self.eqdur_truth_noscatter
 
-        save_every = 20
+        save_every = 10000
 
         Temperature = 1
 
@@ -824,12 +833,60 @@ class Flares:
 
         issue = 0
 
-        tpeak_draw_pool = [True, False]
-        fwhm_draw_pool = [True, False]
-        ampl_draw_pool = [True, False]
+        tpeak_draw_pool = [True, False, False, False]
+        fwhm_draw_pool = [True, False, False, False]
+        ampl_draw_pool = [True, False, False, False]
         new_member_draw_pool = [True, False, False, False, False]
 
-        while len(master_population_pool) < initial_pop_size:
+
+        where_target_max = np.where(self.y_flare_scatter == max(self.y_flare_scatter))[0]
+        tpeak_guess_grid = self.x_flare[where_target_max - 1] + np.array([0.2, 0.4, 0.5, 0.6, 0.8, 1.0, 1.2]) * self.cadence * ( 1. / 24.) * (1. / 60.)
+        # tpeak_guess_grid = self.x_flare[where_target_max - 1] + np.array([0.25, 0.5, 0.75, 1.0]) * self.cadence * ( 1. / 24.) * (1. / 60.)
+        fwhm_guess_calc = self.get_fwhm(self.x_flare, self.y_flare_scatter)
+        fwhm_guess_grid = np.array([1./5., 2./5., 3./5., 4./5.]) * fwhm_guess_calc * 24. * 60.
+        # fwhm_guess_grid = np.array([1./3., 2./3.]) * fwhm_guess_calc * 24. * 60.
+
+        max_amp_factor = 6. / (30. / self.cadence)
+        max_amp = max_amp_factor * max(self.y_flare_scatter)
+        min_amp = max(self.y_flare_scatter)
+        ampl_guess_diff = (max_amp - min_amp)/5.
+        ampl_guess_grid = np.linspace(min_amp, max_amp+ampl_guess_diff, 5)
+
+        # ampl_guess_diff = (max_amp - min_amp) / 3.
+        # ampl_guess_grid = np.linspace(min_amp, max_amp + ampl_guess_diff, 3)
+
+
+        initial_pop = []
+        initial_pop_tpeaks = []
+        initial_pop_fwhms = []
+        initial_pop_ampls = []
+
+        print('Calculating Initial Population...')
+
+        status_updater = 0
+        for tpeak_grid_i in range(len(tpeak_guess_grid)):
+            for fwhm_grid_i in range(len(fwhm_guess_grid)):
+                for ampl_grid_i in range(len(ampl_guess_grid)):
+
+                    tpeak_guess_initial = tpeak_guess_grid[tpeak_grid_i]
+                    fwhm_guess_initial = fwhm_guess_grid[fwhm_grid_i]
+                    ampl_guess_initial = ampl_guess_grid[ampl_grid_i]
+
+                    self.generate_candidate(guess_tpeak=tpeak_guess_initial, guess_fwhm=fwhm_guess_initial, guess_ampl=ampl_guess_initial)
+                    initial_pop.append(self.y_flare_noscatter_candidate)
+
+                    initial_pop_tpeaks.append(tpeak_guess_initial)
+                    initial_pop_fwhms.append(fwhm_guess_initial)
+                    initial_pop_ampls.append(ampl_guess_initial)
+
+
+                    status_updater+=1
+
+                    print(str(status_updater)+ ' / ' + str(len(tpeak_guess_grid)*len(fwhm_guess_grid)*len(ampl_guess_grid)))
+
+        fwhm_guess_calc = fwhm_guess_calc * 24. * 60.
+        # while len(master_population_pool) < initial_pop_size:
+        for initial_i in range(len(initial_pop)):
 
             population_genes = []
             population_pool = []
@@ -838,20 +895,28 @@ class Flares:
             population_EDs = []
             population_tpeakfracs = []
 
-            fwhm_guess_calc = self.get_fwhm(self.x_flare, self.y_flare_scatter)
+            # fwhm_guess_calc = self.get_fwhm(self.x_flare, self.y_flare_scatter)
+            #
+            # tpeak_guess = np.abs(self.x_flare[np.where(self.y_flare_scatter == np.max(self.y_flare_scatter))[0][0]] + np.random.uniform(-0.5, 0.5, 1)[0] * self.cadence * (1. / 24.) * (1. / 60.))
+            # fwhm_guess = np.abs(np.random.uniform(0.15*fwhm_guess_calc, 1.0*fwhm_guess_calc, 1)[0]) * 24. * 60. # (1. / 24.) * (1. / 60.)
+            # ampl_guess = np.abs(np.random.uniform(0.95*max(self.y_flare_scatter), 2.0*max(self.y_flare_scatter), 1)[0])
 
-            tpeak_guess = np.abs(self.x_flare[np.where(self.y_flare_scatter == np.max(self.y_flare_scatter))[0][0]] + np.random.uniform(-0.5, 0.5, 1)[0] * self.cadence * (1. / 24.) * (1. / 60.))
-            fwhm_guess = np.abs(np.random.uniform(0.15*fwhm_guess_calc, 1.0*fwhm_guess_calc, 1)[0]) * 24. * 60. # (1. / 24.) * (1. / 60.)
-            ampl_guess = np.abs(np.random.uniform(0.95*max(self.y_flare_scatter), 2.0*max(self.y_flare_scatter), 1)[0])
 
-            self.generate_candidate(guess_tpeak=tpeak_guess, guess_fwhm=fwhm_guess, guess_ampl=ampl_guess)
-            population_candidate = self.y_flare_noscatter_candidate
+            # self.generate_candidate(guess_tpeak=tpeak_guess, guess_fwhm=fwhm_guess, guess_ampl=ampl_guess)
+            # population_candidate = self.y_flare_noscatter_candidate
+
+            tpeak_guess = initial_pop_tpeaks[initial_i]
+            fwhm_guess = initial_pop_fwhms[initial_i]
+            ampl_guess = initial_pop_ampls[initial_i]
+
+            population_candidate = initial_pop[initial_i]
 
             residuals = self.y_flare_scatter - population_candidate
 
             weights = abs(self.y_flare_scatter / self.y_flare_err)
-            fitness = (1. / 2.) * np.sum((-np.log(2. * np.pi) - np.log((self.y_flare_err) ** 2) - ((residuals ** 2) / ((self.y_flare_err) ** 2))) * weights)
-
+            # fitness = (1. / 2.) * np.sum((-np.log(2. * np.pi) - np.log((self.y_flare_err) ** 2) - ((residuals ** 2) / ((self.y_flare_err) ** 2))) * weights)
+            # fitness = sum(np.log(1. / (self.y_flare_err * np.sqrt(2. * np.pi))) * (-(residuals ** 2)) / (2. * self.y_flare_err ** 2) * weights)
+            fitness = sum(np.log(1. / (self.y_flare_err * np.sqrt(2. * np.pi))) * (-(residuals ** 2)) / (2. * self.y_flare_err ** 2))
             if fitness not in population_fitnesses:
                 if (np.isinf(fitness) == False) and (np.isnan(fitness) == False):
                     population_genes.append([tpeak_guess, fwhm_guess, ampl_guess])
@@ -928,6 +993,8 @@ class Flares:
 
             for child_i in range(n_children):
 
+                print('new genearation ' + str(child_i+1))
+
                 parent1 = int(np.random.choice(pool_elements, p=probability_distribution))
                 parent2 = int(np.random.choice(pool_elements, p=probability_distribution))
                 count = 0
@@ -975,29 +1042,63 @@ class Flares:
                 if made_tpeak_guess != 1:
                     random_draw = np.random.choice(tpeak_draw_pool)  # See if it mutates
                     if random_draw == True:  # Does it mutate
-                        if np.random.choice([True, False, False]) == True:  # Is it a big mutation
-                            tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.75 * self.cadence / 24. / 60., 1)[0])
+                        if np.random.choice([True, False, False, False, False, False, False]) == True:  # Is it a big mutation
+                            if self.cadence >= 15:
+                                tpeak_guess = np.abs(np.random.uniform(tpeak_guess - 0.75*self.cadence/24./60., tpeak_guess, 1)[0])
+                            else:
+                                tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.15 * self.cadence / 24. / 60., 1)[0])
                         else:
-                            tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.05 * self.cadence / 24. / 60., 1)[0])
+                            tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.025 * self.cadence / 24. / 60., 1)[0])
 
                 if made_fwhm_guess != 1:
                     random_draw = np.random.choice(fwhm_draw_pool)  # See if it mutates
                     if random_draw == True:  # Does it mutate
-                        if np.random.choice([True, False, False]) == True:  # Is it a big mutation
-                            fwhm_guess = np.abs(np.random.uniform(0.50*old_fwhm_guess, 1.50*old_fwhm_guess, 1)[0])
+                        if np.random.choice([True, False, False, False, False, False, False]) == True:  # Is it a big mutation
+                            fwhm_guess = np.abs(np.random.uniform(0.75*old_fwhm_guess, 1.20*old_fwhm_guess, 1)[0])
+                            too_long_to_guess = 0
+                            while (fwhm_guess > fwhm_guess_calc) and (too_long_to_guess < 10):
+                                fwhm_guess = np.abs(np.random.uniform(0.75 * old_fwhm_guess, 1.20 * old_fwhm_guess, 1)[0])
+                                too_long_to_guess += 1
+
                         else:
-                            fwhm_guess = np.abs(np.random.uniform(0.90 * old_fwhm_guess, 1.10 * old_fwhm_guess, 1)[0])
+                            fwhm_guess = np.abs(np.random.uniform(0.95 * old_fwhm_guess, 1.05 * old_fwhm_guess, 1)[0])
+                            too_long_to_guess = 0
+                            while (fwhm_guess > fwhm_guess_calc) and (too_long_to_guess < 10):
+                                fwhm_guess = np.abs(np.random.uniform(0.95 * old_fwhm_guess, 1.05 * old_fwhm_guess, 1)[0])
+                                too_long_to_guess += 1
+
 
                 if made_ampl_guess != 1:
                     old_ampl_guess = np.copy(ampl_guess)
                     random_draw = np.random.choice(ampl_draw_pool)  # See if it mutates
                     if random_draw == True:  # Does it mutate
-                        if np.random.choice([True, False, False, False]) == True:  # Is it a shifted big mutation
-                            ampl_guess = np.abs(np.random.uniform(0.50*old_ampl_guess, 2*old_ampl_guess, 1)[0])
-                        elif np.random.choice([True, False, False]) == True:
+                        if np.random.choice([True, True, True, True, True, False]) == True: # is it a small mutation
                             ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.05*old_ampl_guess, 1)[0])
-                        elif np.random.choice([True, True, False]) == True:  # Is it a big mutation
-                            ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.30*old_ampl_guess, 1)[0])
+                            too_long_to_guess = 0
+                            while (ampl_guess < min_amp) and (too_long_to_guess < 10):
+                                ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.05 * old_ampl_guess, 1)[0])
+                                too_long_to_guess += 1
+
+                            if too_long_to_guess >= 10:
+                                ampl_guess = min_amp
+                        else: # it will be a big mutation
+                            if self.cadence >= 15:  # if the cadence is large, it will be a big shifted mutation
+                                ampl_guess = np.abs(np.random.uniform(old_ampl_guess, 2*old_ampl_guess, 1)[0])
+                                too_long_to_guess = 0
+                                while (ampl_guess < min_amp) and (too_long_to_guess < 10):
+                                    ampl_guess = np.abs(np.random.uniform(old_ampl_guess, 5*old_ampl_guess, 1)[0])
+                                    too_long_to_guess += 1
+                            else:  # if cadence is smaller than the above condition, it will be this type of big mutation
+                                ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.30*old_ampl_guess, 1)[0])
+                                too_long_to_guess = 0
+                                while (ampl_guess < min_amp) and (too_long_to_guess < 10):
+                                    ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.30 * old_ampl_guess, 1)[0])
+                                    too_long_to_guess += 1
+
+                            if too_long_to_guess >= 10:
+                                ampl_guess = min_amp
+
+
 
                 self.generate_candidate(tpeak_guess, fwhm_guess, ampl_guess)
                 population_candidate = self.y_flare_noscatter_candidate
@@ -1005,8 +1106,9 @@ class Flares:
                 residuals = self.y_flare_scatter - population_candidate
 
                 weights = abs(self.y_flare_scatter / self.y_flare_err)
-                fitness = (1. / 2.) * np.sum((-np.log(2. * np.pi) - np.log((self.y_flare_err) ** 2) - ((residuals ** 2) / ((self.y_flare_err) ** 2))) * weights)
-
+                # fitness = (1. / 2.) * sum((-np.log(2. * np.pi) - np.log((self.y_flare_err) ** 2) - ((residuals ** 2) / ((self.y_flare_err) ** 2))) * weights)
+                # fitness = sum(np.log(1. / (self.y_flare_err * np.sqrt(2. * np.pi))) * (-(residuals ** 2)) / (2. * self.y_flare_err ** 2) * weights)
+                fitness = sum(np.log(1. / (self.y_flare_err * np.sqrt(2. * np.pi))) * (-(residuals ** 2)) / (2. * self.y_flare_err ** 2))
                 if fitness not in population_fitnesses2:
                     if (np.isinf(fitness) == False) and (np.isnan(fitness) == False):
                         population_genes2.append([tpeak_guess, fwhm_guess, ampl_guess])
@@ -1029,7 +1131,9 @@ class Flares:
                 residuals = self.y_flare_scatter - population_candidate
 
                 weights = abs(self.y_flare_scatter / self.y_flare_err)
-                fitness = (1. / 2.) * np.sum((-np.log(2. * np.pi) - np.log((self.y_flare_err) ** 2) - ((residuals ** 2) / ((self.y_flare_err) ** 2))) * weights)
+                # fitness = (1. / 2.) * np.sum((-np.log(2. * np.pi) - np.log((self.y_flare_err) ** 2) - ((residuals ** 2) / ((self.y_flare_err) ** 2))) * weights)
+                # fitness = sum(np.log(1. / (self.y_flare_err * np.sqrt(2. * np.pi))) * (-(residuals ** 2)) / (2. * self.y_flare_err ** 2) * weights)
+                fitness = sum(np.log(1. / (self.y_flare_err * np.sqrt(2. * np.pi))) * (-(residuals ** 2)) / (2. * self.y_flare_err ** 2))
 
                 if fitness not in population_fitnesses2:
                     if (np.isinf(fitness) == False) and (np.isnan(fitness) == False):
@@ -1071,10 +1175,12 @@ class Flares:
 
             # where_young = np.where(np.array(population_ages2) < max_age)[0]
             where_young = []
-            for thing in range(len(population_ages2)):
-                max_age = int(np.random.normal(avg_max_age, 4, 1)[0])
-                if population_ages2[thing] <= max_age:
-                    where_young.append(thing)
+            for member_i in range(len(population_ages2)):
+                ranks = np.arange(len(population_ages2))[::-1]
+                # max_age = int(np.random.normal(avg_max_age, 4, 1)[0])
+                max_age = ranks[member_i]
+                if population_ages2[member_i] <= max_age:
+                    where_young.append(member_i)
             if len(where_young) > 0:
                 population_ages2_young = list(np.array(population_ages2)[where_young])
 
@@ -1135,31 +1241,61 @@ class Flares:
                             made_ampl_guess = 1
 
                     if made_tpeak_guess != 1:
-                        random_draw = np.random.choice(tpeak_draw_pool)
+                        random_draw = np.random.choice(tpeak_draw_pool)  # See if it mutates
                         if random_draw == True:  # Does it mutate
-                            if np.random.choice([True, False, False]) == True:  # Is it a big mutation
-                                tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.75 * self.cadence / 24. / 60., 1)[0])
+                            if np.random.choice([True, False, False, False, False, False, False]) == True:  # Is it a big mutation
+                                if self.cadence >= 15:
+                                    tpeak_guess = np.abs(np.random.uniform(tpeak_guess - 0.75 * self.cadence / 24. / 60., tpeak_guess, 1)[0])
+                                else:
+                                    tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.15 * self.cadence / 24. / 60., 1)[0])
                             else:
-                                tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.05 * self.cadence / 24. / 60., 1)[0])
+                                tpeak_guess = np.abs(np.random.normal(tpeak_guess, 0.025 * self.cadence / 24. / 60., 1)[0])
 
                     if made_fwhm_guess != 1:
-                        random_draw = np.random.choice(fwhm_draw_pool)
+                        random_draw = np.random.choice(fwhm_draw_pool)  # See if it mutates
                         if random_draw == True:  # Does it mutate
-                            if np.random.choice([True, False, False]) == True:  # Is it a big mutation
-                                fwhm_guess = np.abs(np.random.uniform(0.50 * old_fwhm_guess, 1.50 * old_fwhm_guess, 1)[0])
+                            if np.random.choice([True, False, False, False, False, False, False]) == True:  # Is it a big mutation
+                                fwhm_guess = np.abs(np.random.uniform(0.75 * old_fwhm_guess, 1.20 * old_fwhm_guess, 1)[0])
+                                too_long_to_guess = 0
+                                while (fwhm_guess > fwhm_guess_calc) and (too_long_to_guess < 10):
+                                    fwhm_guess = np.abs(np.random.uniform(0.75 * old_fwhm_guess, 1.20 * old_fwhm_guess, 1)[0])
+                                    too_long_to_guess += 1
+
                             else:
-                                fwhm_guess = np.abs(np.random.uniform(0.90 * old_fwhm_guess, 1.10 * old_fwhm_guess, 1)[0])
+                                fwhm_guess = np.abs(np.random.uniform(0.95 * old_fwhm_guess, 1.05 * old_fwhm_guess, 1)[0])
+                                too_long_to_guess = 0
+                                while (fwhm_guess > fwhm_guess_calc) and (too_long_to_guess < 10):
+                                    fwhm_guess = np.abs(np.random.uniform(0.95 * old_fwhm_guess, 1.05 * old_fwhm_guess, 1)[0])
+                                    too_long_to_guess += 1
 
                     if made_ampl_guess != 1:
                         old_ampl_guess = np.copy(ampl_guess)
-                        random_draw = np.random.choice(ampl_draw_pool)
+                        random_draw = np.random.choice(ampl_draw_pool)  # See if it mutates
                         if random_draw == True:  # Does it mutate
-                            if np.random.choice([True, False, False, False]) == True:  # Is it a big, big mutation
-                                ampl_guess = np.abs(np.random.uniform(0.50 * old_ampl_guess, 2 * old_ampl_guess, 1)[0])
-                            elif np.random.choice([True, False, False]) == True:
-                                ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.05*old_ampl_guess, 1)[0])
-                            elif np.random.choice([True, True, False]) == True:  # Is it a big mutation
-                                ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.30*old_ampl_guess, 1)[0])
+                            if np.random.choice([True, True, True, True, True, False]) == True:  # is it a small mutation
+                                ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.05 * old_ampl_guess, 1)[0])
+                                too_long_to_guess = 0
+                                while (ampl_guess < min_amp) and (too_long_to_guess < 10):
+                                    ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.05 * old_ampl_guess, 1)[0])
+                                    too_long_to_guess += 1
+                                if too_long_to_guess >= 10:
+                                    ampl_guess = min_amp
+                            else:  # it will be a big mutation
+                                if self.cadence >= 15:  # if the cadence is large, it will be a big shifted mutation
+                                    ampl_guess = np.abs(np.random.uniform(old_ampl_guess, 5 * old_ampl_guess, 1)[0])
+                                    too_long_to_guess = 0
+                                    while (ampl_guess < min_amp) and (too_long_to_guess < 10):
+                                        ampl_guess = np.abs(np.random.uniform(old_ampl_guess, 5 * old_ampl_guess, 1)[0])
+                                        too_long_to_guess += 1
+                                else:  # if cadence is smaller, it will be this type of big mutation
+                                    ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.30 * old_ampl_guess, 1)[0])
+                                    too_long_to_guess = 0
+                                    while (ampl_guess < min_amp) and (too_long_to_guess < 10):
+                                        ampl_guess = np.abs(np.random.normal(old_ampl_guess, 0.30 * old_ampl_guess, 1)[0])
+                                        too_long_to_guess += 1
+
+                                if too_long_to_guess >= 10:
+                                    ampl_guess = min_amp
 
                     self.generate_candidate(tpeak_guess, fwhm_guess, ampl_guess)
                     population_candidate = self.y_flare_noscatter_candidate
@@ -1173,7 +1309,9 @@ class Flares:
 
                     weights = abs(self.y_flare_scatter / self.y_flare_err)
                     # fitness = (1. / 2.) * np.sum(-np.log(2. * np.pi) - np.log((flare_f_err*weights) ** 2) - ((residuals ** 2) / ((flare_f_err*weights) ** 2)))
-                    fitness = (1. / 2.) * np.sum((-np.log(2. * np.pi) - np.log((self.y_flare_err) ** 2) - ((residuals ** 2) / ((self.y_flare_err) ** 2))) * weights)
+                    # fitness = (1. / 2.) * np.sum((-np.log(2. * np.pi) - np.log((self.y_flare_err) ** 2) - ((residuals ** 2) / ((self.y_flare_err) ** 2))) * weights)
+                    # fitness = sum(np.log(1. / (self.y_flare_err * np.sqrt(2. * np.pi))) * (-(residuals ** 2)) / (2. * self.y_flare_err ** 2) * weights)
+                    fitness = sum(np.log(1. / (self.y_flare_err * np.sqrt(2. * np.pi))) * (-(residuals ** 2)) / (2. * self.y_flare_err ** 2))
                     # fitness = np.round(fitness, 1)
                     # print(fitness)
                     # import pdb; pdb.set_trace()
@@ -1200,8 +1338,9 @@ class Flares:
                     residuals = self.y_flare_scatter - population_candidate
 
                     weights = abs(self.y_flare_scatter / self.y_flare_err)
-                    fitness = (1. / 2.) * np.sum((-np.log(2. * np.pi) - np.log((self.y_flare_err) ** 2) - ((residuals ** 2) / ((self.y_flare_err) ** 2))) * weights)
-
+                    # fitness = (1. / 2.) * np.sum((-np.log(2. * np.pi) - np.log((self.y_flare_err) ** 2) - ((residuals ** 2) / ((self.y_flare_err) ** 2))) * weights)
+                    # fitness = sum(np.log(1. / (self.y_flare_err * np.sqrt(2. * np.pi))) * (-(residuals ** 2)) / (2. * self.y_flare_err ** 2) * weights)
+                    fitness = sum(np.log(1. / (self.y_flare_err * np.sqrt(2. * np.pi))) * (-(residuals ** 2)) / (2. * self.y_flare_err ** 2))
                     if fitness not in population_fitnesses2_young:
                         if (np.isinf(fitness) == False) and (np.isnan(fitness) == False):
                             population_genes2_young.append([tpeak_guess, fwhm_guess, ampl_guess])
@@ -1287,7 +1426,7 @@ class Flares:
             save_test_individual = self.save_movie_dir + str(iter_i + 1) + '_Flare_Fit_' + self.template + '_' + str(self.cadence) + '.pdf'
             save_as_tracker = self.save_movie_dir + 'gene_progression_' + self.template + '_' + str(self.cadence) + '.pdf'
 
-            save_movie_plots = True
+            save_movie_plots = False
             if save_movie_plots == True:
 
                 if iter_i == 0:
@@ -1393,17 +1532,17 @@ def set_directory(save_dir, fl_template, lc_cadence, lc_tfrac):
     for sub_dir in os.listdir(save_dir):
         dir = os.path.join(save_dir, sub_dir)
         if os.path.isdir(dir):
-            if fl_template + '_' + str(lc_cadence) + '_' + str(np.round(lc_tfrac,1)) in dir:
+            if fl_template + '_' + str(lc_cadence) + '_' + str(np.round(lc_tfrac,2)) in dir:
                 dir_num = int(dir[-1])
                 dir_nums.append(dir_num)
                 does_dir_exist = True
 
     if does_dir_exist == False:
-        new_dir = save_dir + fl_template + '_' + str(lc_cadence) + '_' + str(np.round(lc_tfrac,1)) + '_' + str(0)
+        new_dir = save_dir + fl_template + '_' + str(lc_cadence) + '_' + str(np.round(lc_tfrac,2)) + '_' + str(0)
         os.mkdir(new_dir)
 
     if does_dir_exist == True:
-        new_dir = save_dir + fl_template + '_' + str(lc_cadence) + '_' + str(np.round(lc_tfrac,1)) + '_' + str(int(dir_nums[0] + 1))
+        new_dir = save_dir + fl_template + '_' + str(lc_cadence) + '_' + str(np.round(lc_tfrac,2)) + '_' + str(int(dir_nums[0] + 1))
         os.mkdir(new_dir)
 
     new_dir += '/'
@@ -1413,107 +1552,109 @@ def set_directory(save_dir, fl_template, lc_cadence, lc_tfrac):
 stddev = 0.001 * (1. / 50)
 
 
-do_GA_fit = False
+do_GA_fit = True
 if do_GA_fit == True:
 
-    test_t_fractions = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.0, 0.1, 0.2]
-    test_cadences = [30.0, 2.0, 10./60., 1.0, 20.0, 10.0]  # 16.0, 8.0, 4.0]
+    test_t_fractions = [0.45, 0.55, 0.65, 0.75, 0.85, 0.95, 0.05, 0.15, 0.25, 0.35]
+    test_cadences = [30.0, 1.0, 20.0, 10.0, 2.0, 10./60.]  # 16.0, 8.0, 4.0]
     iterations = 100
 
     for iter_i in range(iterations):
 
-        for t_frac_i, t_frac in enumerate(test_t_fractions):
-            for lc_cad_i, lc_cad in enumerate(test_cadences):
+        for lc_cad_i, lc_cad in enumerate(test_cadences):
 
-                lightcurve_cadence = lc_cad  # minutes
-                start_at_cadence_fraction = t_frac
+            lightcurve_cadence = lc_cad  # minutes
 
-                t_range = [0.475, 0.60]
+            t_frac = np.random.uniform(0,1.,1)[0]
+            start_at_cadence_fraction = t_frac
 
-                set_tpeak = 0.5 # days
-                set_fwhm = 10.0 # min
-                set_ampl = 1.0
+            t_range = [0.475, 0.60]
 
-                flare_template = 'Jackman'
+            set_tpeak = 0.5 # days
+            set_fwhm = 10.0 # min
+            set_ampl = 1.0
 
-                save_directory = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/'
-                save_movie_directory = set_directory(save_dir=save_directory, fl_template=flare_template,
-                                                     lc_cadence=lightcurve_cadence, lc_tfrac=start_at_cadence_fraction)
+            flare_template = 'Jackman'
+            fit_flare_template = 'Davenport'
 
-
-                # import pdb; pdb.set_trace()
-
-                F = Flares(template=flare_template, cadence=lightcurve_cadence, tpeak=set_tpeak, fwhm=set_fwhm, ampl=set_ampl,
-                           downsample=True, GA=True, time_range=t_range, bench_frac=start_at_cadence_fraction, random_bench=False,
-                           save_movie_dir=save_movie_directory)
-                F.generate_flare()
-                F.fit_flare()
-
-                print(' ')
-                print('Template: ' + flare_template)
-                print('------------------')
-                print('S/N at peak: ' + str(F.sig_to_noise))
-                print('tpeak frac: ' + str(F.tpeak_frac))
-                if flare_template == 'Jackman':
-                    tpeak_truth = F.tpeak_conv
-                    FWHM_truth = F.fwhm_conv
-                    ampl_truth = F.ampl_conv
-                    print('tpeak truth: ' + str(F.tpeak_conv))
-                    print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
-                    print('FWHM truth: ' + str(F.fwhm_conv))
-                    print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
-                    print('ampl truth: ' + str(F.ampl_conv))
-                    print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
-                if flare_template == 'Davenport':
-                    tpeak_truth = F.tpeak
-                    FWHM_truth = F.fwhm
-                    ampl_truth = F.ampl
-                    print('tpeak truth: ' + str(F.tpeak))
-                    print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
-                    print('FWHM truth: ' + str(F.fwhm))
-                    print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
-                    print('ampl truth: ' + str(F.ampl))
-                    print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
-                print(' ')
-                print('ED truth: ' + str(F.eqdur_truth_noscatter))
-                print('ED fit: ' + str(F.fit_ED) + ' +/- ' + str(F.fit_ED_err))
-                print('ED obs: ' + str(F.eqdur_obs_noscatter))
-
-                fit_data = {'Template': [flare_template],
-                            'Cadence (min)': [F.cadence],
-                            'tpeak frac': [F.tpeak_frac],
-                            'tpeak frac fit': [F.fit_tpeak_frac],
-                            'tpeak frac fit err': [F.fit_tpeak_frac_err],
-                            'S/N at peak': [F.sig_to_noise[0]],
-                            'tpeak truth': [tpeak_truth],
-                            'tpeak fit': [F.fit_tpeak],
-                            'tpeak fit err': [F.fit_tpeak_err],
-                            'FWHM truth': [FWHM_truth],
-                            'FWHM fit': [F.fit_fwhm],
-                            'FWHM fit err': [F.fit_fwhm_err],
-                            'ampl truth': [ampl_truth],
-                            'ampl fit': [F.fit_ampl],
-                            'ampl fit err':[F.fit_ampl_err],
-                            'ED truth': [F.eqdur_truth_noscatter],
-                            'ED fit': [F.fit_ED],
-                            'ED fit err': [F.fit_ED_err],
-                            'ED obs': [F.eqdur_obs_scatter],
-                            }
-
-                file_name = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Files/Flare_Fit_Data.csv'
-                old_fit_data = pd.read_csv(file_name)
-
-                cols = old_fit_data.columns
-                for col_i, col in enumerate(cols):
-                    current_col = old_fit_data[col].values
-                    for val_i, val in enumerate(current_col):
-                        fit_data[col].append(val)
-
-                df_fit_data = pd.DataFrame(fit_data)
-                df_fit_data.to_csv(file_name, index=False)
+            save_directory = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Figures/'
+            save_movie_directory = set_directory(save_dir=save_directory, fl_template=flare_template,
+                                                 lc_cadence=lightcurve_cadence, lc_tfrac=start_at_cadence_fraction)
 
 
-do_plot_flare_fits = True
+            # import pdb; pdb.set_trace()
+
+            F = Flares(template=flare_template, fit_template=fit_flare_template, cadence=lightcurve_cadence,
+                       tpeak=set_tpeak, fwhm=set_fwhm, ampl=set_ampl, downsample=True, GA=True, time_range=t_range,
+                       bench_frac=start_at_cadence_fraction, random_bench=False, save_movie_dir=save_movie_directory)
+            F.generate_flare()
+            F.fit_flare()
+
+            print(' ')
+            print('Template: ' + flare_template)
+            print('------------------')
+            print('S/N at peak: ' + str(F.sig_to_noise))
+            print('tpeak frac: ' + str(F.tpeak_frac))
+            if flare_template == 'Jackman':
+                tpeak_truth = F.tpeak_conv
+                FWHM_truth = F.fwhm_conv
+                ampl_truth = F.ampl_conv
+                print('tpeak truth: ' + str(F.tpeak_conv))
+                print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
+                print('FWHM truth: ' + str(F.fwhm_conv))
+                print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
+                print('ampl truth: ' + str(F.ampl_conv))
+                print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
+            if flare_template == 'Davenport':
+                tpeak_truth = F.tpeak
+                FWHM_truth = F.fwhm
+                ampl_truth = F.ampl
+                print('tpeak truth: ' + str(F.tpeak))
+                print('tpeak fit: ' + str(F.fit_tpeak) + ' +/- ' + str(F.fit_tpeak_err))
+                print('FWHM truth: ' + str(F.fwhm))
+                print('FWHM fit: ' + str(F.fit_fwhm) + ' +/- ' + str(F.fit_fwhm_err))
+                print('ampl truth: ' + str(F.ampl))
+                print('ampl fit: ' + str(F.fit_ampl) + ' +/- ' + str(F.fit_ampl_err))
+            print(' ')
+            print('ED truth: ' + str(F.eqdur_truth_noscatter))
+            print('ED fit: ' + str(F.fit_ED) + ' +/- ' + str(F.fit_ED_err))
+            print('ED obs: ' + str(F.eqdur_obs_noscatter))
+
+            fit_data = {'Template': [flare_template],
+                        'Cadence (min)': [F.cadence],
+                        'tpeak frac': [F.tpeak_frac],
+                        'tpeak frac fit': [F.fit_tpeak_frac],
+                        'tpeak frac fit err': [F.fit_tpeak_frac_err],
+                        'S/N at peak': [F.sig_to_noise[0]],
+                        'tpeak truth': [tpeak_truth],
+                        'tpeak fit': [F.fit_tpeak],
+                        'tpeak fit err': [F.fit_tpeak_err],
+                        'FWHM truth': [FWHM_truth],
+                        'FWHM fit': [F.fit_fwhm],
+                        'FWHM fit err': [F.fit_fwhm_err],
+                        'ampl truth': [ampl_truth],
+                        'ampl fit': [F.fit_ampl],
+                        'ampl fit err':[F.fit_ampl_err],
+                        'ED truth': [F.eqdur_truth_noscatter],
+                        'ED fit': [F.fit_ED],
+                        'ED fit err': [F.fit_ED_err],
+                        'ED obs': [F.eqdur_obs_scatter],
+                        }
+
+            file_name = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Files/Flare_Fit_Data.csv'
+            old_fit_data = pd.read_csv(file_name)
+
+            cols = old_fit_data.columns
+            for col_i, col in enumerate(cols):
+                current_col = old_fit_data[col].values
+                for val_i, val in enumerate(current_col):
+                    fit_data[col].append(val)
+
+            df_fit_data = pd.DataFrame(fit_data)
+            df_fit_data.to_csv(file_name, index=False)
+
+
+do_plot_flare_fits = False
 if do_plot_flare_fits == True:
 
     data_file = '/Users/lbiddle/Desktop/Plots_For_Dissertation/Chapter3_Files/Flare_Fit_Data.csv'
